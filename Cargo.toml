@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8"
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "json"] }
+sqlx = { version = "~0.8", features = ["runtime-tokio", "postgres", "json"] }
 tokio = { version = "1.38", features = ["full"] }
 futures = "0.3.30"
 serde = "1.0"
