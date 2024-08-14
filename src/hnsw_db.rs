@@ -211,7 +211,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         }
     }
 
-    pub async fn is_match(&self, neighbors: &[FurthestQueue<V>]) -> bool {
+    pub async fn is_match(&mut self, neighbors: &[FurthestQueue<V>]) -> bool {
         match neighbors
             .first()
             .and_then(|bottom_layer| bottom_layer.get_nearest())
