@@ -7,6 +7,7 @@ use std::fmt::Debug;
 pub mod graph_mem;
 mod graph_pg;
 
+#[allow(async_fn_in_trait)]
 pub trait GraphStore<V: VectorStore> {
     async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>>;
 
@@ -17,7 +18,7 @@ pub trait GraphStore<V: VectorStore> {
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntryPoint<VectorRef> {
     pub vector_ref: VectorRef,
     pub layer_count: usize,

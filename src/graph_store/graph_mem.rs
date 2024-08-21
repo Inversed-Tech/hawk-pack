@@ -2,6 +2,7 @@ use super::{EntryPoint, GraphStore};
 use crate::{hnsw_db::FurthestQueue, VectorStore};
 use std::collections::HashMap;
 
+#[derive(Default, Clone)]
 pub struct GraphMem<V: VectorStore> {
     entry_point: Option<EntryPoint<V::VectorRef>>,
     layers: Vec<Layer<V>>,
@@ -51,6 +52,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
     }
 }
 
+#[derive(Default, Clone)]
 struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
     links: HashMap<V::VectorRef, FurthestQueue<V>>,

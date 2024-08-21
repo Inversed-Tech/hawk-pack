@@ -7,9 +7,13 @@ use crate::{hnsw_db::FurthestQueue, GraphStore, VectorStore};
 
 use super::EntryPoint;
 
+#[allow(dead_code)]
 const DB_URL: &str = "postgres://postgres:postgres@localhost/postgres";
+
+#[allow(dead_code)]
 const POOL_SIZE: u32 = 5;
 
+#[allow(dead_code)]
 const CREATE_TABLE_LINKS: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_links (
     source_ref text NOT NULL,
@@ -18,6 +22,7 @@ CREATE TABLE IF NOT EXISTS hawk_graph_links (
     CONSTRAINT hawk_graph_pkey PRIMARY KEY (source_ref, layer)
 )";
 
+#[allow(dead_code)]
 const CREATE_TABLE_ENTRY: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_entry (
     entry_point jsonb,
@@ -32,6 +37,7 @@ pub struct GraphPg<V: VectorStore> {
 }
 
 impl<V: VectorStore> GraphPg<V> {
+    #[allow(dead_code)]
     pub async fn new() -> Result<Self, sqlx::Error> {
         let pool = PgPoolOptions::new()
             .max_connections(POOL_SIZE)
@@ -160,7 +166,7 @@ mod tests {
         let ep = graph.get_entry_point().await;
 
         let ep2 = EntryPoint {
-            vector_ref: vectors[0].clone(),
+            vector_ref: vectors[0],
             layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
         };
 
@@ -174,11 +180,11 @@ mod tests {
 
             for j in 4..7 {
                 links
-                    .insert(&mut vector_store, vectors[j].clone(), distances[j].clone())
+                    .insert(&mut vector_store, vectors[j], distances[j])
                     .await;
             }
 
-            graph.set_links(vectors[i].clone(), links.clone(), 0).await;
+            graph.set_links(vectors[i], links.clone(), 0).await;
 
             let links2 = graph.get_links(&vectors[i], 0).await;
             assert_eq!(*links, *links2);
@@ -206,16 +212,16 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query).await;
+            let neighbors = db.search_to_insert(query).await;
             assert!(!db.is_match(&neighbors).await);
             // Insert the new vector into the store.
-            let inserted = db.vector_store.insert(&query).await;
+            let inserted = db.vector_store.insert(query).await;
             db.insert_from_search_results(inserted, neighbors).await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query).await;
+            let neighbors = db.search_to_insert(query).await;
             assert!(db.is_match(&neighbors).await);
         }
     }

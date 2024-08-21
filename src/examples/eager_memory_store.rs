@@ -5,7 +5,7 @@ use crate::VectorStore;
 /// Example implementation of a vector store - Eager variant.
 ///
 /// A distance is computed eagerly on request in `eval_distance`, and `DistanceRef` points to an actual distance.
-#[derive(Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct EagerMemoryStore {
     vectors: Vec<u64>,
 
@@ -61,7 +61,7 @@ impl VectorStore for EagerMemoryStore {
         // Hamming distance
         let query = self.pending_queries[query_ref.0];
         let vector = self.vectors[vector_ref.0];
-        let distance = (query ^ vector).count_ones() as u32;
+        let distance = (query ^ vector).count_ones();
 
         self.distances.push(distance);
         DistanceRef(self.distances.len() - 1)

@@ -6,6 +6,8 @@ pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
+#[allow(non_snake_case)]
+#[derive(Clone)]
 struct Params {
     ef: usize,
     M: usize,
@@ -18,6 +20,7 @@ struct Params {
 ///
 /// Operations on vectors are delegated to a VectorStore.
 /// Operations on the graph are delegate to a GraphStore.
+#[derive(Clone)]
 pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
     params: Params,
     pub vector_store: V,
@@ -56,7 +59,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
-            let mut links = self.graph_store.get_links(&n, lc).await;
+            let mut links = self.graph_store.get_links(n, lc).await;
             links
                 .insert(&mut self.vector_store, q.clone(), nq.clone())
                 .await;
@@ -83,6 +86,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         self.params.ef
     }
 
+    #[allow(non_snake_case)]
     async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueue<V>, usize) {
         if let Some(entry_point) = self.graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
@@ -99,6 +103,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     }
 
     /// Mutate W into the ef nearest neighbors of q_vec in the given layer.
+    #[allow(non_snake_case)]
     async fn search_layer(
         &mut self,
         q: &V::QueryRef,
@@ -170,15 +175,16 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         }
     }
 
+    #[allow(non_snake_case)]
     pub async fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueue<V>> {
         let mut links = vec![];
 
-        let (mut W, layer_count) = self.search_init(&query).await;
+        let (mut W, layer_count) = self.search_init(query).await;
 
         // From the top layer down to layer 0.
         for lc in (0..layer_count).rev() {
             let ef = self.ef_for_layer(lc);
-            self.search_layer(&query, &mut W, ef, lc).await;
+            self.search_layer(query, &mut W, ef, lc).await;
 
             links.push(W.clone());
         }
@@ -243,16 +249,16 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query).await;
+            let neighbors = db.search_to_insert(query).await;
             assert!(!db.is_match(&neighbors).await);
             // Insert the new vector into the store.
-            let inserted = db.vector_store.insert(&query).await;
+            let inserted = db.vector_store.insert(query).await;
             db.insert_from_search_results(inserted, neighbors).await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query).await;
+            let neighbors = db.search_to_insert(query).await;
             assert!(db.is_match(&neighbors).await);
         }
     }

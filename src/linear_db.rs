@@ -1,7 +1,8 @@
 use crate::VectorStore;
 
+#[derive(Clone)]
 pub struct LinearDb<V: VectorStore> {
-    store: V,
+    pub store: V,
     vectors: Vec<V::VectorRef>,
 }
 
@@ -14,18 +15,18 @@ impl<V: VectorStore> LinearDb<V> {
     }
 
     pub async fn insert(&mut self, query: &V::QueryRef) -> bool {
-        if self.exists(&query).await {
+        if self.exists(query).await {
             return false;
         }
 
-        let vector = self.store.insert(&query).await;
+        let vector = self.store.insert(query).await;
         self.vectors.push(vector);
         true
     }
 
     async fn exists(&mut self, query: &V::QueryRef) -> bool {
         for vector in &self.vectors {
-            let distance = self.store.eval_distance(&query, vector).await;
+            let distance = self.store.eval_distance(query, vector).await;
             if self.store.is_match(&distance).await {
                 return true;
             }

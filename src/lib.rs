@@ -2,7 +2,7 @@ pub mod graph_store;
 pub mod hnsw_db;
 
 pub mod examples;
-mod linear_db;
+pub mod linear_db;
 
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -21,7 +21,8 @@ impl<T> Ref for T where
 }
 
 // The operations exposed by a vector store, sufficient for a search algorithm.
-pub trait VectorStore: Debug {
+#[allow(async_fn_in_trait)]
+pub trait VectorStore: Clone + Debug {
     /// Opaque reference to a query.
     ///
     /// Example: a preprocessed representation optimized for distance evaluations.
