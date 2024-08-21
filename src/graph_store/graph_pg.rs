@@ -7,13 +7,10 @@ use crate::{hnsw_db::FurthestQueue, GraphStore, VectorStore};
 
 use super::EntryPoint;
 
-#[allow(dead_code)]
 const DB_URL: &str = "postgres://postgres:postgres@localhost/postgres";
 
-#[allow(dead_code)]
 const POOL_SIZE: u32 = 5;
 
-#[allow(dead_code)]
 const CREATE_TABLE_LINKS: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_links (
     source_ref text NOT NULL,
@@ -22,7 +19,6 @@ CREATE TABLE IF NOT EXISTS hawk_graph_links (
     CONSTRAINT hawk_graph_pkey PRIMARY KEY (source_ref, layer)
 )";
 
-#[allow(dead_code)]
 const CREATE_TABLE_ENTRY: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_entry (
     entry_point jsonb,

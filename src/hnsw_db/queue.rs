@@ -88,11 +88,6 @@ pub struct NearestQueue<V: VectorStore> {
 }
 
 impl<V: VectorStore> NearestQueue<V> {
-    #[allow(dead_code)]
-    fn new() -> Self {
-        NearestQueue { queue: vec![] }
-    }
-
     pub fn from_furthest_queue(furthest_queue: &FurthestQueue<V>) -> Self {
         NearestQueue {
             queue: furthest_queue.iter().rev().cloned().collect(),
