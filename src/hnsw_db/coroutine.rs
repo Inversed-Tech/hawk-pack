@@ -27,7 +27,7 @@ where
 {
     let (tx, rx) = mpsc::channel(1);
     tokio::spawn(async move {
-        let mut hawk = HawkSearcher::new(
+        let hawk = HawkSearcher::new(
             OpsCollector { ops: tx.clone() },
             OpsCollector { ops: tx.clone() },
         );

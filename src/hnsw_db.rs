@@ -3,7 +3,7 @@ use std::collections::HashSet;
 mod queue;
 use aes_prng::AesRng;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
