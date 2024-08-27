@@ -1,13 +1,15 @@
 // Converted from Python to Rust.
 use std::collections::HashSet;
 mod queue;
+use aes_prng::AesRng;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
+use rand::{Rng, RngCore, SeedableRng};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
 #[allow(non_snake_case)]
-#[derive(Clone)]
+#[derive(PartialEq, Clone)]
 struct Params {
     ef: usize,
     M: usize,
@@ -24,11 +26,13 @@ struct Params {
 pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
     params: Params,
     pub vector_store: V,
-    graph_store: G,
+    pub graph_store: G,
+    rng: AesRng,
 }
 
 impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     pub fn new(vector_store: V, graph_store: G) -> Self {
+        let rng = AesRng::seed_from_u64(0_u64);
         HawkSearcher {
             params: Params {
                 ef: 32,
@@ -39,6 +43,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
             },
             vector_store,
             graph_store,
+            rng,
         }
     }
 
@@ -71,8 +76,8 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         self.graph_store.set_links(q.clone(), neighbors, lc).await;
     }
 
-    fn select_layer(&self) -> usize {
-        let random = rand::random::<f64>();
+    fn select_layer(&mut self) -> usize {
+        let random = self.rng.gen::<f64>();
         (-random.ln() * self.params.m_L) as usize
     }
 
@@ -87,14 +92,13 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     }
 
     #[allow(non_snake_case)]
-    async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueueV<V>, usize) {
+    async fn search_init(&self, query: &V::QueryRef) -> (FurthestQueueV<V>, usize) {
         if let Some(entry_point) = self.graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
             let distance = self.vector_store.eval_distance(query, &entry_vector).await;
 
             let mut W = FurthestQueueV::<V>::new();
-            W.insert(&mut self.vector_store, entry_vector, distance)
-                .await;
+            W.insert(&self.vector_store, entry_vector, distance).await;
 
             (W, entry_point.layer_count)
         } else {
@@ -104,13 +108,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
 
     /// Mutate W into the ef nearest neighbors of q_vec in the given layer.
     #[allow(non_snake_case)]
-    async fn search_layer(
-        &mut self,
-        q: &V::QueryRef,
-        W: &mut FurthestQueueV<V>,
-        ef: usize,
-        lc: usize,
-    ) {
+    async fn search_layer(&self, q: &V::QueryRef, W: &mut FurthestQueueV<V>, ef: usize, lc: usize) {
         // v: The set of already visited vectors.
         let mut v = HashSet::<V::VectorRef>::from_iter(W.iter().map(|(e, _eq)| e.clone()));
 
@@ -163,11 +161,10 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
                 }
 
                 // Track the new candidate in C so we will continue this path later.
-                C.insert(&mut self.vector_store, e.clone(), eq.clone())
-                    .await;
+                C.insert(&self.vector_store, e.clone(), eq.clone()).await;
 
                 // Track the new candidate as a potential k-nearest.
-                W.insert(&mut self.vector_store, e, eq).await;
+                W.insert(&self.vector_store, e, eq).await;
 
                 // fq stays the furthest distance in W.
                 (_, fq) = W.get_furthest().expect("W cannot be empty").clone();
@@ -176,7 +173,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     }
 
     #[allow(non_snake_case)]
-    pub async fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueueV<V>> {
+    pub async fn search_to_insert(&self, query: &V::QueryRef) -> Vec<FurthestQueueV<V>> {
         let mut links = vec![];
 
         let (mut W, layer_count) = self.search_init(query).await;

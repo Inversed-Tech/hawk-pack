@@ -93,7 +93,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn eval_distance(
-        &mut self,
+        &self,
         query: &Self::QueryRef,
         vector: &Self::VectorRef,
     ) -> Self::DistanceRef {
@@ -104,7 +104,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn eval_distance_batch(
-        &mut self,
+        &self,
         query: &Self::QueryRef,
         vectors: &[Self::VectorRef],
     ) -> Vec<Self::DistanceRef> {

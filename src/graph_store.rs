@@ -13,7 +13,8 @@ pub trait GraphStore<V: VectorStore> {
 
     async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>);
 
-    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueueV<V>;
+    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize)
+        -> FurthestQueueV<V>;
 
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize);
 }

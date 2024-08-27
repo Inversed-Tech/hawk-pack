@@ -58,7 +58,7 @@ impl VectorStore for LazyMemoryStore {
     }
 
     async fn eval_distance(
-        &mut self,
+        &self,
         query: &Self::QueryRef,
         vector: &Self::VectorRef,
     ) -> Self::DistanceRef {

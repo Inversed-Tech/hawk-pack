@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 #[derive(Default, Clone)]
 pub struct GraphMem<V: VectorStore> {
-    entry_point: Option<EntryPoint<V::VectorRef>>,
-    layers: Vec<Layer<V>>,
+    pub entry_point: Option<EntryPoint<V::VectorRef>>,
+    pub layers: Vec<Layer<V>>,
 }
 
 impl<V: VectorStore> GraphMem<V> {
@@ -59,10 +59,10 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
     }
 }
 
-#[derive(Default, Clone)]
-struct Layer<V: VectorStore> {
+#[derive(PartialEq, Eq, Default, Clone)]
+pub struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
-    links: HashMap<V::VectorRef, FurthestQueueV<V>>,
+    pub links: HashMap<V::VectorRef, FurthestQueueV<V>>,
 }
 
 impl<V: VectorStore> Layer<V> {
@@ -80,3 +80,13 @@ impl<V: VectorStore> Layer<V> {
         self.links.insert(from, links);
     }
 }
+
+// impl<U, T, W> From<GraphMem<U>> for GraphMem<T>
+// where
+//     U: VectorStore<VectorRef = W>,
+//     T: VectorStore<VectorRef = W>,
+// {
+//     fn from(_value: GraphMem<U>) -> Self {
+//         unimplemented!()
+//     }
+// }

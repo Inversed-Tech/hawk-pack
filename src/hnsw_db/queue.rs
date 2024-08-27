@@ -27,7 +27,7 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
+    pub async fn insert<V>(&mut self, store: &V, to: Vector, dist: Distance)
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
@@ -105,7 +105,7 @@ impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the descending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
+    pub async fn insert<V>(&mut self, store: &V, to: Vector, dist: Distance)
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
