@@ -3,7 +3,7 @@ use std::collections::HashSet;
 mod queue;
 use aes_prng::AesRng;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
@@ -31,8 +31,8 @@ pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
 }
 
 impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
-    pub fn new(vector_store: V, graph_store: G) -> Self {
-        let rng = AesRng::seed_from_u64(0_u64);
+    pub fn new<R: RngCore>(vector_store: V, graph_store: G, rng: &mut R) -> Self {
+        let rng = AesRng::from_rng(rng).unwrap();
         HawkSearcher {
             params: Params {
                 ef: 32,
@@ -238,7 +238,8 @@ mod tests {
     async fn test_hnsw_db() {
         let vector_store = LazyMemoryStore::new();
         let graph_store = GraphMem::new();
-        let mut db = HawkSearcher::new(vector_store, graph_store);
+        let mut rng = AesRng::seed_from_u64(0_u64);
+        let mut db = HawkSearcher::new(vector_store, graph_store, &mut rng);
 
         let queries = (0..100)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))

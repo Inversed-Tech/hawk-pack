@@ -3,6 +3,7 @@ use crate::{
     hnsw_db::{FurthestQueue, HawkSearcher},
     GraphStore, Ref, VectorStore,
 };
+use aes_prng::AesRng;
 use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -27,9 +28,11 @@ where
 {
     let (tx, rx) = mpsc::channel(1);
     tokio::spawn(async move {
+        let mut rng = AesRng::from_random_seed();
         let hawk = HawkSearcher::new(
             OpsCollector { ops: tx.clone() },
             OpsCollector { ops: tx.clone() },
+            &mut rng,
         );
         let result = hawk.search_to_insert(&query).await;
         tx.send(Op::SearchResult { query, result }).await.unwrap();

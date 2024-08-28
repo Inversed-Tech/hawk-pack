@@ -133,6 +133,8 @@ mod tests {
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use aes_prng::AesRng;
+    use rand::SeedableRng;
     use tokio;
 
     #[ignore]
@@ -207,7 +209,8 @@ mod tests {
             .unwrap();
 
         let vector_store = LazyMemoryStore::new();
-        let mut db = HawkSearcher::new(vector_store, graph_store);
+        let mut rng = AesRng::seed_from_u64(0_u64);
+        let mut db = HawkSearcher::new(vector_store, graph_store, &mut rng);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
