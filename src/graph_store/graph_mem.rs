@@ -80,13 +80,3 @@ impl<V: VectorStore> Layer<V> {
         self.links.insert(from, links);
     }
 }
-
-// impl<U, T, W> From<GraphMem<U>> for GraphMem<T>
-// where
-//     U: VectorStore<VectorRef = W>,
-//     T: VectorStore<VectorRef = W>,
-// {
-//     fn from(_value: GraphMem<U>) -> Self {
-//         unimplemented!()
-//     }
-// }
