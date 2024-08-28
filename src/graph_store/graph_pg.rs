@@ -135,6 +135,7 @@ mod tests {
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
     use tokio;
 
+    #[ignore]
     #[tokio::test]
     async fn test_db() {
         let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
@@ -182,9 +183,7 @@ mod tests {
             let mut links = FurthestQueue::new();
 
             for j in 4..7 {
-                links
-                    .insert(&mut vector_store, vectors[j], distances[j])
-                    .await;
+                links.insert(&vector_store, vectors[j], distances[j]).await;
             }
 
             graph.set_links(vectors[i], links.clone(), 0).await;
@@ -194,6 +193,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[tokio::test]
     async fn test_hnsw_db() {
         let graph_store = GraphPg::new().await.unwrap();

@@ -66,7 +66,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         for (n, nq) in neighbors.iter() {
             let mut links = self.graph_store.get_links(n, lc).await;
             links
-                .insert(&mut self.vector_store, q.clone(), nq.clone())
+                .insert(&self.vector_store, q.clone(), nq.clone())
                 .await;
             links.trim_to_k_nearest(max_links);
             self.graph_store.set_links(n.clone(), links, lc).await;

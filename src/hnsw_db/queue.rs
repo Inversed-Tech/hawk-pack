@@ -155,25 +155,25 @@ impl<Vector: Clone, Distance: Clone> Clone for NearestQueue<Vector, Distance> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::eager_memory_store::EagerMemoryStore;
+    use crate::examples::lazy_memory_store::LazyMemoryStore;
 
     #[tokio::test]
     async fn test_furthest_queue() {
-        let mut store = EagerMemoryStore::new();
+        let mut store = LazyMemoryStore::new();
         let query = store.prepare_query(1);
         let vector = store.insert(&query).await;
         let distance = store.eval_distance(&query, &vector).await;
 
         // Example usage for FurthestQueue
         let mut furthest_queue = FurthestQueue::new();
-        furthest_queue.insert(&mut store, vector, distance).await;
+        furthest_queue.insert(&store, vector, distance).await;
         println!("{:?}", furthest_queue.get_furthest());
         println!("{:?}", furthest_queue.get_k_nearest(1));
         println!("{:?}", furthest_queue.pop_furthest());
 
         // Example usage for NearestQueue
         let mut nearest_queue = NearestQueue::from_furthest_queue(&furthest_queue);
-        nearest_queue.insert(&mut store, vector, distance).await;
+        nearest_queue.insert(&store, vector, distance).await;
         println!("{:?}", nearest_queue.get_nearest());
         println!("{:?}", nearest_queue.pop_nearest());
     }

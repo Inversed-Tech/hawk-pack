@@ -2,7 +2,6 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-use hawk_pack::examples::eager_memory_store::EagerMemoryStore;
 use hawk_pack::examples::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::graph_store::graph_mem::GraphMem;
 use hawk_pack::hnsw_db::HawkSearcher;
@@ -56,7 +55,7 @@ fn hnsw_db(c: &mut Criterion) {
 fn linear(c: &mut Criterion) {
     let mut group = c.benchmark_group("linear");
     for database_size in [1000, 10000, 100000] {
-        let vector_store = EagerMemoryStore::new();
+        let vector_store = LazyMemoryStore::new();
         let mut initial_db = LinearDb::new(vector_store);
 
         let queries = (0..database_size)
