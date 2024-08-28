@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 #[derive(Default, Clone)]
 pub struct GraphMem<V: VectorStore> {
-    pub entry_point: Option<EntryPoint<V::VectorRef>>,
-    pub layers: Vec<Layer<V>>,
+    entry_point: Option<EntryPoint<V::VectorRef>>,
+    layers: Vec<Layer<V>>,
 }
 
 impl<V: VectorStore> GraphMem<V> {
@@ -16,6 +16,31 @@ impl<V: VectorStore> GraphMem<V> {
         GraphMem {
             entry_point: None,
             layers: vec![],
+        }
+    }
+}
+
+// Plain converter for a Graph structure that has the same distance ref and vector ref
+// Needed when switching from a PlaintextStore to a secret shared VectorStore.
+impl<V: VectorStore> GraphMem<V> {
+    pub fn from_another<U>(graph: GraphMem<U>) -> Self
+    where
+        U: VectorStore,
+        U: VectorStore<DistanceRef = V::DistanceRef>,
+        U: VectorStore<VectorRef = V::VectorRef>,
+    {
+        let new_entry = graph.entry_point as Option<EntryPoint<V::VectorRef>>;
+        let layers: Vec<_> = graph
+            .layers
+            .into_iter()
+            .map(|v| {
+                let links: HashMap<_, _> = v.links.into_iter().collect();
+                Layer::<V> { links }
+            })
+            .collect();
+        GraphMem::<V> {
+            entry_point: new_entry,
+            layers,
         }
     }
 }
@@ -62,7 +87,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
 #[derive(PartialEq, Eq, Default, Clone)]
 pub struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
-    pub links: HashMap<V::VectorRef, FurthestQueueV<V>>,
+    links: HashMap<V::VectorRef, FurthestQueueV<V>>,
 }
 
 impl<V: VectorStore> Layer<V> {
