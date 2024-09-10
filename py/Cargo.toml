@@ -1,0 +1,13 @@
+[package]
+name = "hawk_pack_py"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.maturin]
+bindings = "pyo3"
+
+[dependencies]
+pyo3 = { version = "0.16", features = ["extension-module"] }
+
+[lib]
+crate-type = ["cdylib"]
