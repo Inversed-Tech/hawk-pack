@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use super::*;
 
 use crate::VectorStore;
 

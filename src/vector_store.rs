@@ -1,5 +1,7 @@
 use super::*;
+use serde::{Deserialize, Serialize};
 
+pub mod lazy_db_store;
 pub mod lazy_memory_store;
 
 // The operations exposed by a vector store, sufficient for a search algorithm.
