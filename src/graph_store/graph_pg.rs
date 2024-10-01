@@ -261,6 +261,7 @@ mod tests {
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::vector_store::lazy_db_store::{test_utils::TestVectorPg, LazyDbStore};
     use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
@@ -318,10 +319,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_hnsw_db() {
-        let graph = TestGraphPg::new().await.unwrap();
-        let vector_store = LazyMemoryStore::new();
+        let graph = TestGraphPg::<LazyDbStore>::new().await.unwrap();
+        let vector_store = TestVectorPg::new().await.unwrap();
         let mut rng = AesRng::seed_from_u64(0_u64);
-        let mut db = HawkSearcher::new(vector_store.clone(), graph.owned(), &mut rng);
+        let mut db =
+            HawkSearcher::<LazyDbStore, _>::new(vector_store.clone(), graph.owned(), &mut rng);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
@@ -343,13 +345,17 @@ mod tests {
         }
 
         let graph_table_paths = graph.copy_out().await.unwrap();
-        let vector_store = db.vector_store.clone();
+        let vectors = db.vector_store.copy_out().await.unwrap();
         graph.cleanup().await.unwrap();
+        db.vector_store.cleanup().await.unwrap();
 
         // Test copy_in
         {
             let graph = TestGraphPg::new().await.unwrap();
             graph.copy_in(graph_table_paths).await.unwrap();
+
+            let vector_store = TestVectorPg::new().await.unwrap();
+            vector_store.copy_in(vectors).await.unwrap();
 
             let mut rng = AesRng::seed_from_u64(0_u64);
             let db = HawkSearcher::new(vector_store.clone(), graph.owned(), &mut rng);
@@ -360,6 +366,7 @@ mod tests {
                 assert!(db.is_match(&neighbors).await);
             }
             graph.cleanup().await.unwrap();
+            vector_store.cleanup().await.unwrap();
         }
     }
 }
