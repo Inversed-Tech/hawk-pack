@@ -306,11 +306,12 @@ pub mod test_utils {
 #[cfg(test)]
 #[cfg(feature = "db_dependent")]
 mod tests {
-    use std::ops::DerefMut;
+    use std::ops::{Deref, DerefMut};
 
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::vector_store::lazy_db_store::test_utils::TestVectorPg;
     use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
@@ -369,7 +370,7 @@ mod tests {
     #[tokio::test]
     async fn test_hnsw_db() {
         let mut graph = TestGraphPg::new().await.unwrap();
-        let vector_store = &mut LazyMemoryStore::new();
+        let mut vector_store = TestVectorPg::new().await.unwrap();
         let rng = &mut AesRng::seed_from_u64(0_u64);
         let db = HawkSearcher::default();
 
@@ -380,13 +381,13 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let neighbors = db
-                .search_to_insert(vector_store, graph.deref_mut(), query)
+                .search_to_insert(vector_store.deref_mut(), graph.deref_mut(), query)
                 .await;
-            assert!(!db.is_match(vector_store, &neighbors).await);
+            assert!(!db.is_match(vector_store.deref(), &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
             db.insert_from_search_results(
-                vector_store,
+                vector_store.deref_mut(),
                 graph.deref_mut(),
                 rng,
                 inserted,
@@ -398,29 +399,35 @@ mod tests {
         // Search for the same codes and find matches.
         for query in queries.iter() {
             let neighbors = db
-                .search_to_insert(vector_store, graph.deref_mut(), query)
+                .search_to_insert(vector_store.deref_mut(), graph.deref_mut(), query)
                 .await;
-            assert!(db.is_match(vector_store, &neighbors).await);
+            assert!(db.is_match(vector_store.deref(), &neighbors).await);
         }
 
-        let graph_table_paths = graph.copy_out().await.unwrap();
-        graph.cleanup().await.unwrap();
+        let graph_table_paths = graph.deref().copy_out().await.unwrap();
+        let vectors = vector_store.deref().copy_out().await.unwrap();
+        graph.deref_mut().cleanup().await.unwrap();
+        vector_store.deref_mut().cleanup().await.unwrap();
 
         // Test copy_in
         {
-            let graph = TestGraphPg::new().await.unwrap();
-            graph.copy_in(graph_table_paths).await.unwrap();
+            let mut graph = TestGraphPg::new().await.unwrap();
+            graph.deref().copy_in(graph_table_paths).await.unwrap();
+
+            let mut vector_store = TestVectorPg::new().await.unwrap();
+            vector_store.deref_mut().copy_in(vectors).await.unwrap();
 
             let db = HawkSearcher::default();
 
             // Search for the same codes and find matches.
             for query in queries.iter() {
                 let neighbors = db
-                    .search_to_insert(&mut vector_store.clone(), &mut graph.owned(), query)
+                    .search_to_insert(vector_store.deref_mut(), &mut graph.owned(), query)
                     .await;
-                assert!(db.is_match(vector_store, &neighbors).await);
+                assert!(db.is_match(vector_store.deref(), &neighbors).await);
             }
-            graph.cleanup().await.unwrap();
+            graph.deref_mut().cleanup().await.unwrap();
+            vector_store.deref_mut().cleanup().await.unwrap();
         }
     }
 }

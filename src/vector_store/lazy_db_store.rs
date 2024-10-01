@@ -241,10 +241,6 @@ pub mod test_utils {
             })
         }
 
-        pub async fn cleanup(&self) -> Result<()> {
-            cleanup(&self.vectors.pool, &self.schema_name).await
-        }
-
         pub fn owned(&self) -> LazyDbStore {
             LazyDbStore {
                 cache: self.cache.clone(),
@@ -274,14 +270,6 @@ pub mod test_utils {
 
     fn temporary_name() -> String {
         format!("{}_{}", SCHEMA_PREFIX, rand::random::<u32>())
-    }
-
-    async fn cleanup(pool: &sqlx::PgPool, schema_name: &str) -> Result<()> {
-        assert!(schema_name.starts_with(SCHEMA_PREFIX));
-        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", schema_name))
-            .execute(pool)
-            .await?;
-        Ok(())
     }
 }
 
