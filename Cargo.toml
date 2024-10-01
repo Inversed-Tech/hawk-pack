@@ -11,8 +11,8 @@ eyre = "0.6"
 futures = "0.3.30"
 rand = "0.8"
 rand_core = "0.6.4"
-sqlx = { version = "~0.8", features = [
-    "runtime-tokio",
+sqlx = { version = "~0.7", features = [
+    "runtime-tokio-native-tls",
     "postgres",
     "json",
     "sqlite",
