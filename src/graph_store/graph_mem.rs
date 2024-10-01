@@ -160,8 +160,8 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        examples::lazy_memory_store::{LazyMemoryStore, PointId},
         hnsw_db::HawkSearcher,
+        vector_store::lazy_memory_store::{LazyMemoryStore, PointId},
     };
 
     use super::*;

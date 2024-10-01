@@ -38,7 +38,7 @@ impl<V: VectorStore> LinearDb<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
 
     #[tokio::test]
     async fn test_linear_db() {

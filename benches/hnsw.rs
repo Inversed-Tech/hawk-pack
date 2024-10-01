@@ -3,10 +3,10 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-use hawk_pack::examples::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::graph_store::graph_mem::GraphMem;
 use hawk_pack::hnsw_db::HawkSearcher;
 use hawk_pack::linear_db::LinearDb;
+use hawk_pack::vector_store::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::VectorStore;
 use rand::SeedableRng;
 
