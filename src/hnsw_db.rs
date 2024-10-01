@@ -230,8 +230,8 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::graph_store::graph_mem::GraphMem;
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use tokio;
 
     #[tokio::test]
