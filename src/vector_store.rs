@@ -1,5 +1,7 @@
 use super::*;
+use serde::{Deserialize, Serialize};
 
+pub mod lazy_db_store;
 pub mod lazy_memory_store;
 
 // The operations exposed by a vector store, sufficient for a search algorithm.
@@ -100,3 +102,20 @@ pub trait VectorStore: Clone + Debug {
         results
     }
 }
+
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Point {
+    /// Whatever encoding of a vector.
+    data: u64,
+    /// Distinguish between queries that are pending, and those that were ultimately accepted into the vector store.
+    is_persistent: bool,
+}
+
+impl Point {
+    pub fn is_persistent(&self) -> bool {
+        self.is_persistent
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PointId(usize);

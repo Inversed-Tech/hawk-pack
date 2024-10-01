@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use super::*;
 
 use crate::VectorStore;
 
@@ -9,17 +9,6 @@ use crate::VectorStore;
 pub struct LazyMemoryStore {
     points: Vec<Point>,
 }
-
-#[derive(Clone, Debug)]
-struct Point {
-    /// Whatever encoding of a vector.
-    data: u64,
-    /// Distinguish between queries that are pending, and those that were ultimately accepted into the vector store.
-    is_persistent: bool,
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PointId(usize);
 
 impl LazyMemoryStore {
     pub fn new() -> Self {
