@@ -240,8 +240,8 @@ impl HawkSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::graph_store::graph_mem::GraphMem;
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;

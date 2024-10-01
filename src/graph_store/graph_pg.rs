@@ -310,8 +310,8 @@ mod tests {
 
     use super::test_utils::TestGraphPg;
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;
