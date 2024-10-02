@@ -120,6 +120,13 @@ impl<V: VectorStore> GraphPg<V> {
 
         Ok((paths[0].clone(), paths[1].clone()))
     }
+
+    pub async fn cleanup(&self) -> Result<()> {
+        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", self.schema_name))
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
@@ -241,10 +248,6 @@ pub mod test_utils {
             Ok(TestGraphPg { graph, schema_name })
         }
 
-        pub async fn cleanup(&self) -> Result<()> {
-            cleanup(&self.graph.pool, &self.schema_name).await
-        }
-
         pub fn owned(&self) -> GraphPg<V> {
             GraphPg {
                 schema_name: self.schema_name.clone(),
@@ -274,14 +277,6 @@ pub mod test_utils {
 
     fn temporary_name() -> String {
         format!("{}_{}", SCHEMA_PREFIX, rand::random::<u32>())
-    }
-
-    async fn cleanup(pool: &sqlx::PgPool, schema_name: &str) -> Result<()> {
-        assert!(schema_name.starts_with(SCHEMA_PREFIX));
-        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", schema_name))
-            .execute(pool)
-            .await?;
-        Ok(())
     }
 }
 
