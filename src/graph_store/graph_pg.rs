@@ -1,6 +1,6 @@
 use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
-    GraphStore, VectorStore,
+    DbStore, GraphStore, VectorStore,
 };
 use eyre::{eyre, Result};
 use sqlx::postgres::PgRow;
@@ -22,8 +22,8 @@ pub struct GraphPg<V: VectorStore> {
     phantom: PhantomData<V>,
 }
 
-impl<V: VectorStore> GraphPg<V> {
-    pub async fn new(url: &str, schema_name: &str) -> Result<Self> {
+impl<V: VectorStore> DbStore for GraphPg<V> {
+    async fn new(url: &str, schema_name: &str) -> Result<Self> {
         let connect_sql = sql_switch_schema(schema_name)?;
 
         let pool = PgPoolOptions::new()
@@ -51,43 +51,15 @@ impl<V: VectorStore> GraphPg<V> {
         })
     }
 
-    pub async fn copy_in(&self, graph_entry: String, graph_links: String) -> Result<()> {
-        {
-            let table_name = "hawk_graph_entry";
-            let file = tokio::fs::File::open(graph_entry).await?;
-            let mut conn = self.pool.acquire().await?;
-
-            let mut copy_stream = conn
-                .copy_in_raw(&format!(
-                    "COPY {} FROM STDIN (FORMAT CSV, HEADER)",
-                    table_name
-                ))
-                .await?;
-
-            copy_stream.read_from(file).await?;
-            copy_stream.finish().await?;
-        }
-
-        {
-            let table_name = "hawk_graph_links";
-            let file = tokio::fs::File::open(graph_links).await?;
-            let mut conn = self.pool.acquire().await?;
-
-            let mut copy_stream = conn
-                .copy_in_raw(&format!(
-                    "COPY {} FROM STDIN (FORMAT CSV, HEADER)",
-                    table_name
-                ))
-                .await?;
-
-            copy_stream.read_from(file).await?;
-            copy_stream.finish().await?;
-        }
-
-        Ok(())
+    fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
     }
 
-    pub async fn copy_out(&self) -> Result<(String, String)> {
+    fn schema_name(&self) -> String {
+        self.schema_name.to_owned()
+    }
+
+    async fn copy_out(&self) -> Result<Vec<(String, String)>> {
         use futures::stream::TryStreamExt;
         use tokio::io::AsyncWriteExt;
 
@@ -118,10 +90,13 @@ impl<V: VectorStore> GraphPg<V> {
             }
         }
 
-        Ok((paths[0].clone(), paths[1].clone()))
+        Ok(vec![
+            (tables[0].to_owned(), paths[0].clone()),
+            (tables[1].to_owned(), paths[1].clone()),
+        ])
     }
 
-    pub async fn cleanup(&self) -> Result<()> {
+    async fn cleanup(&self) -> Result<()> {
         sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", self.schema_name))
             .execute(&self.pool)
             .await?;
@@ -380,13 +355,13 @@ mod tests {
             assert!(db.is_match(vector_store, &neighbors).await);
         }
 
-        let (graph_entry, graph_links) = graph.copy_out().await.unwrap();
+        let graph_table_paths = graph.copy_out().await.unwrap();
         graph.cleanup().await.unwrap();
 
         // Test copy_in
         {
             let graph = TestGraphPg::new().await.unwrap();
-            graph.copy_in(graph_entry, graph_links).await.unwrap();
+            graph.copy_in(graph_table_paths).await.unwrap();
 
             let db = HawkSearcher::default();
 
