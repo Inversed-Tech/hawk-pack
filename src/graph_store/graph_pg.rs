@@ -9,7 +9,7 @@ use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
 use std::{marker::PhantomData, path};
 
-use super::EntryPoint;
+use super::{EntryPoint, GraphMem};
 
 const MAX_CONNECTIONS: u32 = 5;
 
@@ -176,6 +176,50 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .execute(&self.pool)
         .await
         .expect("Failed to set links");
+    }
+}
+
+impl<V: VectorStore> GraphPg<V> {
+    pub async fn to_graph_mem<U>(&self) -> GraphMem<U>
+    where
+        U: VectorStore,
+        U: VectorStore<DistanceRef = V::DistanceRef>,
+        U: VectorStore<VectorRef = V::VectorRef>,
+    {
+        let mut graph_mem = GraphMem::new();
+
+        let entry_point = self.get_entry_point().await;
+        if entry_point.is_some() {
+            graph_mem.set_entry_point(entry_point.unwrap()).await
+        }
+
+        let links = sqlx::query(
+            "
+            SELECT * FROM hawk_graph_links;
+            ",
+        )
+        .fetch_all(self.pool())
+        .await
+        .expect("Failed to fetch hawk_graph_links")
+        .into_iter()
+        .map(|row: PgRow| {
+            let node: String = row.get("source_ref");
+            let links: sqlx::types::Json<FurthestQueueV<U>> = row.get("links");
+            let layer: i32 = row.get("layer");
+
+            let links = links.as_ref().clone();
+            let layer = layer as usize;
+
+            (node, links, layer)
+        })
+        .collect::<Vec<_>>();
+
+        for (node, links, layer) in links.into_iter() {
+            let vector_ref = serde_json::from_str(&node).expect("Could not deserialise vector ref");
+            graph_mem.set_links(vector_ref, links, layer).await;
+        }
+
+        graph_mem
     }
 }
 
@@ -352,10 +396,10 @@ mod tests {
         // Test copy_in
         {
             let graph = TestGraphPg::new().await.unwrap();
-            graph.copy_in(graph_table_paths).await.unwrap();
+            graph.copy_in(graph_table_paths.clone()).await.unwrap();
 
             let vector_store = TestVectorPg::new().await.unwrap();
-            vector_store.copy_in(vectors).await.unwrap();
+            vector_store.copy_in(vectors.clone()).await.unwrap();
 
             let mut rng = AesRng::seed_from_u64(0_u64);
             let db = HawkSearcher::new(vector_store.clone(), graph.owned(), &mut rng);
@@ -366,6 +410,28 @@ mod tests {
                 assert!(db.is_match(&neighbors).await);
             }
             graph.cleanup().await.unwrap();
+            vector_store.cleanup().await.unwrap();
+        }
+
+        // Test to_graph_mem
+        {
+            let graph = TestGraphPg::<LazyDbStore>::new().await.unwrap();
+            graph.copy_in(graph_table_paths).await.unwrap();
+            let graph_mem = graph.to_graph_mem::<LazyDbStore>().await;
+            graph.cleanup().await.unwrap();
+
+            let mut vector_store = TestVectorPg::new().await.unwrap();
+            vector_store.copy_in(vectors).await.unwrap();
+            vector_store.read_to_cache().await;
+
+            let mut rng = AesRng::seed_from_u64(0_u64);
+            let db = HawkSearcher::new(vector_store.clone(), graph_mem, &mut rng);
+
+            // Search for the same codes and find matches.
+            for query in queries.iter() {
+                let neighbors = db.search_to_insert(query).await;
+                assert!(db.is_match(&neighbors).await);
+            }
             vector_store.cleanup().await.unwrap();
         }
     }
