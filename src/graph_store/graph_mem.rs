@@ -171,8 +171,8 @@ mod tests {
         points: HashMap<usize, Point>,
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct Point {
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+    pub struct Point {
         /// Whatever encoding of a vector.
         data: u64,
         /// Distinguish between queries that are pending, and those that were ultimately accepted into the vector store.
@@ -199,7 +199,17 @@ mod tests {
         type Data = u64;
 
         fn prepare_query(&mut self, raw_query: Self::Data) -> <Self as VectorStore>::QueryRef {
-            todo!()
+            let point_id = self.points.len();
+
+            self.points.insert(
+                point_id,
+                Point {
+                    data: raw_query,
+                    is_persistent: false,
+                },
+            );
+
+            TestPointId(point_id)
         }
 
         async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef {

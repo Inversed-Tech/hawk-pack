@@ -133,6 +133,25 @@ impl LazyDbStore {
             })
         }
     }
+
+    pub async fn read_to_cache(&mut self) {
+        let points = sqlx::query(
+            "
+                SELECT point FROM hawk_vectors
+            ",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let point: sqlx::types::Json<Point> = row.get("point");
+            point.as_ref().clone()
+        })
+        .collect();
+
+        self.cache = points;
+    }
 }
 
 impl VectorStore for LazyDbStore {
