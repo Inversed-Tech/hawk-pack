@@ -7,6 +7,9 @@ pub mod lazy_memory_store;
 // The operations exposed by a vector store, sufficient for a search algorithm.
 #[allow(async_fn_in_trait)]
 pub trait VectorStore: Clone + Debug {
+    /// Underlying data type
+    type Data: Ref;
+
     /// Opaque reference to a query.
     ///
     /// Example: a preprocessed representation optimized for distance evaluations.
@@ -21,6 +24,8 @@ pub trait VectorStore: Clone + Debug {
     ///
     /// Example: an encrypted distance.
     type DistanceRef: Ref;
+
+    fn prepare_query(&mut self, raw_query: Self::Data) -> <Self as VectorStore>::QueryRef;
 
     /// Persist a query as a new vector in the store, and return a reference to it.
     async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;

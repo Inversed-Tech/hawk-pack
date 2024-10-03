@@ -107,14 +107,21 @@ impl DbStore for LazyDbStore {
 }
 
 impl LazyDbStore {
-    pub async fn get_point(&self, point: PointId) -> Option<Point> {
+    async fn actually_evaluate_distance(&self, pair: &<Self as VectorStore>::DistanceRef) -> u32 {
+        // Hamming distance
+        let vector_0 = self.get_point(&pair.0).await.unwrap().data;
+        let vector_1 = self.get_point(&pair.1).await.unwrap().data;
+        (vector_0 ^ vector_1).count_ones()
+    }
+
+    async fn get_point(&self, point: &PointId) -> Option<Point> {
         if self.cache.len() > point.0 {
             Some(self.cache[point.0].clone())
         } else {
             sqlx::query(
                 "
-                    SELECT point FROM hawk_vectors WHERE id = $1
-                ",
+                        SELECT point FROM hawk_vectors WHERE id = $1
+                    ",
             )
             .bind(point.0 as i32)
             .fetch_optional(&self.pool)
@@ -126,26 +133,10 @@ impl LazyDbStore {
             })
         }
     }
-
-    pub fn prepare_query(&mut self, raw_query: u64) -> <Self as VectorStore>::QueryRef {
-        self.cache.push(Point {
-            data: raw_query,
-            is_persistent: false,
-        });
-
-        let point_id = self.cache.len() - 1;
-        PointId(point_id)
-    }
-
-    async fn actually_evaluate_distance(&self, pair: &<Self as VectorStore>::DistanceRef) -> u32 {
-        // Hamming distance
-        let vector_0 = self.get_point(pair.0).await.unwrap().data;
-        let vector_1 = self.get_point(pair.1).await.unwrap().data;
-        (vector_0 ^ vector_1).count_ones()
-    }
 }
 
 impl VectorStore for LazyDbStore {
+    type Data = u64;
     type QueryRef = PointId; // Vector ID, pending insertion.
     type VectorRef = PointId; // Vector ID, inserted.
     type DistanceRef = (PointId, PointId); // Lazy distance representation.
@@ -167,6 +158,16 @@ impl VectorStore for LazyDbStore {
         .expect("Failed to set entry point");
 
         *query
+    }
+
+    fn prepare_query(&mut self, raw_query: u64) -> <Self as VectorStore>::QueryRef {
+        self.cache.push(Point {
+            data: raw_query,
+            is_persistent: false,
+        });
+
+        let point_id = self.cache.len() - 1;
+        PointId(point_id)
     }
 
     async fn eval_distance(
