@@ -34,16 +34,6 @@ impl LazyMemoryStore {
 }
 
 impl LazyMemoryStore {
-    pub fn prepare_query(&mut self, raw_query: u64) -> <Self as VectorStore>::QueryRef {
-        self.points.push(Point {
-            data: raw_query,
-            is_persistent: false,
-        });
-
-        let point_id = self.points.len() - 1;
-        PointId(point_id)
-    }
-
     fn actually_evaluate_distance(&self, pair: &<Self as VectorStore>::DistanceRef) -> u32 {
         // Hamming distance
         let vector_0 = self.points[pair.0 .0].data;
@@ -53,6 +43,7 @@ impl LazyMemoryStore {
 }
 
 impl VectorStore for LazyMemoryStore {
+    type Data = u64;
     type QueryRef = PointId; // Vector ID, pending insertion.
     type VectorRef = PointId; // Vector ID, inserted.
     type DistanceRef = (PointId, PointId); // Lazy distance representation.
@@ -61,6 +52,16 @@ impl VectorStore for LazyMemoryStore {
         // The query is now accepted in the store. It keeps the same ID.
         self.points[query.0].is_persistent = true;
         *query
+    }
+
+    fn prepare_query(&mut self, raw_query: u64) -> <Self as VectorStore>::QueryRef {
+        self.points.push(Point {
+            data: raw_query,
+            is_persistent: false,
+        });
+
+        let point_id = self.points.len() - 1;
+        PointId(point_id)
     }
 
     async fn eval_distance(

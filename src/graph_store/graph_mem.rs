@@ -196,6 +196,11 @@ mod tests {
         type QueryRef = TestPointId; // Vector ID, pending insertion.
         type VectorRef = TestPointId; // Vector ID, inserted.
         type DistanceRef = u32; // Eager distance representation.
+        type Data = u64;
+
+        fn prepare_query(&mut self, raw_query: Self::Data) -> <Self as VectorStore>::QueryRef {
+            todo!()
+        }
 
         async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef {
             // The query is now accepted in the store. It keeps the same ID.
