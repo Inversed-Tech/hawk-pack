@@ -171,8 +171,8 @@ mod tests {
         points: HashMap<usize, Point>,
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct Point {
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+    pub struct Point {
         /// Whatever encoding of a vector.
         data: u64,
         /// Distinguish between queries that are pending, and those that were ultimately accepted into the vector store.
@@ -196,6 +196,7 @@ mod tests {
         type QueryRef = TestPointId; // Vector ID, pending insertion.
         type VectorRef = TestPointId; // Vector ID, inserted.
         type DistanceRef = u32; // Eager distance representation.
+        type Data = u64;
 
         async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef {
             // The query is now accepted in the store. It keeps the same ID.
@@ -224,6 +225,20 @@ mod tests {
             distance2: &Self::DistanceRef,
         ) -> bool {
             *distance1 < *distance2
+        }
+
+        fn prepare_query(&mut self, raw_query: Self::Data) -> <Self as VectorStore>::QueryRef {
+            let point_id = self.points.len();
+
+            self.points.insert(
+                point_id,
+                Point {
+                    data: raw_query,
+                    is_persistent: false,
+                },
+            );
+
+            TestPointId(point_id)
         }
     }
 

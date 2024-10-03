@@ -9,7 +9,7 @@ use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
 use std::{marker::PhantomData, path};
 
-use super::EntryPoint;
+use super::{EntryPoint, GraphMem};
 
 const MAX_CONNECTIONS: u32 = 5;
 
@@ -179,6 +179,50 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
     }
 }
 
+impl<V: VectorStore> GraphPg<V> {
+    pub async fn to_graph_mem<U>(&self) -> GraphMem<U>
+    where
+        U: VectorStore,
+        U: VectorStore<DistanceRef = V::DistanceRef>,
+        U: VectorStore<VectorRef = V::VectorRef>,
+    {
+        let mut graph_mem = GraphMem::new();
+
+        let entry_point = self.get_entry_point().await;
+        if entry_point.is_some() {
+            graph_mem.set_entry_point(entry_point.unwrap()).await
+        }
+
+        let links = sqlx::query(
+            "
+            SELECT * FROM hawk_graph_links;
+            ",
+        )
+        .fetch_all(self.pool())
+        .await
+        .expect("Failed to fetch hawk_graph_links")
+        .into_iter()
+        .map(|row: PgRow| {
+            let node: String = row.get("source_ref");
+            let links: sqlx::types::Json<FurthestQueueV<U>> = row.get("links");
+            let layer: i32 = row.get("layer");
+
+            let links = links.as_ref().clone();
+            let layer = layer as usize;
+
+            (node, links, layer)
+        })
+        .collect::<Vec<_>>();
+
+        for (node, links, layer) in links.into_iter() {
+            let vector_ref = serde_json::from_str(&node).expect("Could not deserialise vector ref");
+            graph_mem.set_links(vector_ref, links, layer).await;
+        }
+
+        graph_mem
+    }
+}
+
 fn sql_switch_schema(schema_name: &str) -> Result<String> {
     sanitize_identifier(schema_name)?;
     Ok(format!(
@@ -256,14 +300,14 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
-#[cfg(feature = "db_dependent")]
+// #[cfg(feature = "db_dependent")]
 mod tests {
     use std::ops::{Deref, DerefMut};
 
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
-    use crate::vector_store::lazy_db_store::test_utils::TestVectorPg;
+    use crate::vector_store::lazy_db_store::{test_utils::TestVectorPg, LazyDbStore};
     use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
@@ -335,6 +379,7 @@ mod tests {
             let neighbors = db
                 .search_to_insert(vector_store.deref_mut(), graph.deref_mut(), query)
                 .await;
+
             assert!(!db.is_match(vector_store.deref(), &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
@@ -364,10 +409,18 @@ mod tests {
         // Test copy_in
         {
             let mut graph = TestGraphPg::new().await.unwrap();
-            graph.deref().copy_in(graph_table_paths).await.unwrap();
+            graph
+                .deref()
+                .copy_in(graph_table_paths.clone())
+                .await
+                .unwrap();
 
             let mut vector_store = TestVectorPg::new().await.unwrap();
-            vector_store.deref_mut().copy_in(vectors).await.unwrap();
+            vector_store
+                .deref_mut()
+                .copy_in(vectors.clone())
+                .await
+                .unwrap();
 
             let db = HawkSearcher::default();
 
@@ -380,6 +433,29 @@ mod tests {
             }
             graph.deref_mut().cleanup().await.unwrap();
             vector_store.deref_mut().cleanup().await.unwrap();
+        }
+
+        // Test to_graph_mem
+        {
+            let graph = TestGraphPg::<LazyDbStore>::new().await.unwrap();
+            graph.copy_in(graph_table_paths).await.unwrap();
+            let mut graph_mem = graph.deref().to_graph_mem().await;
+            graph.cleanup().await.unwrap();
+
+            let mut vector_store = TestVectorPg::new().await.unwrap();
+            vector_store.copy_in(vectors).await.unwrap();
+            vector_store.read_to_cache().await;
+
+            let db = HawkSearcher::default();
+
+            // Search for the same codes and find matches.
+            for query in queries.iter() {
+                let neighbors = db
+                    .search_to_insert(vector_store.deref_mut(), &mut graph_mem, query)
+                    .await;
+                assert!(db.is_match(vector_store.deref(), &neighbors).await);
+            }
+            vector_store.cleanup().await.unwrap();
         }
     }
 }
