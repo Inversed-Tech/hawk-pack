@@ -1,14 +1,17 @@
 pub mod graph_store;
 pub mod hnsw_db;
 
-pub mod examples;
 pub mod linear_db;
+pub mod vector_store;
 
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use eyre::Result;
 pub use graph_store::GraphStore;
 use serde::Serialize;
+use sqlx::PgPool;
+pub use vector_store::VectorStore;
 
 pub trait Ref:
     Clone + Debug + PartialEq + Eq + Hash + Sync + Serialize + for<'de> serde::Deserialize<'de>
@@ -20,101 +23,39 @@ impl<T> Ref for T where
 {
 }
 
-// The operations exposed by a vector store, sufficient for a search algorithm.
 #[allow(async_fn_in_trait)]
-pub trait VectorStore: Clone + Debug {
-    /// Opaque reference to a query.
-    ///
-    /// Example: a preprocessed representation optimized for distance evaluations.
-    type QueryRef: Ref;
+pub trait DbStore: Sized {
+    async fn new(url: &str, schema_name: &str) -> Result<Self>;
 
-    /// Opaque reference to a stored vector.
-    ///
-    /// Example: a vector ID.
-    type VectorRef: Ref;
+    fn pool(&self) -> &PgPool;
 
-    /// Opaque reference to a distance metric.
-    ///
-    /// Example: an encrypted distance.
-    type DistanceRef: Ref;
+    fn schema_name(&self) -> String;
 
-    /// Persist a query as a new vector in the store, and return a reference to it.
-    async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;
+    async fn copy_in(&self, table_paths: Vec<(String, String)>) -> Result<()> {
+        for (table_name, path) in table_paths.iter() {
+            let file = tokio::fs::File::open(path).await?;
+            let mut conn = self.pool().acquire().await?;
 
-    /// Evaluate the distance between a query and a vector.
-    async fn eval_distance(
-        &self,
-        query: &Self::QueryRef,
-        vector: &Self::VectorRef,
-    ) -> Self::DistanceRef;
+            let mut copy_stream = conn
+                .copy_in_raw(&format!(
+                    "COPY {} FROM STDIN (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
 
-    /// Check whether a distance is a match, meaning the query is considered equivalent to a previously inserted vector.
-    async fn is_match(&self, distance: &Self::DistanceRef) -> bool;
-
-    /// Compare two distances.
-    async fn less_than(&self, distance1: &Self::DistanceRef, distance2: &Self::DistanceRef)
-        -> bool;
-
-    /// Find the insertion index for a target distance to maintain order in a list of ascending distances.
-    async fn search_sorted(
-        &self,
-        distances: &[Self::DistanceRef],
-        target: &Self::DistanceRef,
-    ) -> usize {
-        let mut left = 0;
-        let mut right = distances.len();
-
-        while left < right {
-            let mid = left + (right - left) / 2;
-
-            match self.less_than(&distances[mid], target).await {
-                true => left = mid + 1,
-                false => right = mid,
-            }
+            copy_stream.read_from(file).await?;
+            copy_stream.finish().await?;
         }
-        left
+
+        Ok(())
     }
 
-    // Batch variants.
+    async fn copy_out(&self) -> Result<Vec<(String, String)>>;
 
-    /// Persist a batch of queries as new vectors in the store, and return references to them.
-    /// The default implementation is a loop over `insert`.
-    /// Override for more efficient batch insertions.
-    async fn insert_batch(&mut self, queries: &[Self::QueryRef]) -> Vec<Self::VectorRef> {
-        let mut results = Vec::with_capacity(queries.len());
-        for query in queries {
-            results.push(self.insert(query).await);
-        }
-        results
-    }
-
-    /// Evaluate the distances between a query and a batch of vectors.
-    /// The default implementation is a loop over `eval_distance`.
-    /// Override for more efficient batch distance evaluations.
-    async fn eval_distance_batch(
-        &self,
-        query: &Self::QueryRef,
-        vectors: &[Self::VectorRef],
-    ) -> Vec<Self::DistanceRef> {
-        let mut results = Vec::with_capacity(vectors.len());
-        for vector in vectors {
-            results.push(self.eval_distance(query, vector).await);
-        }
-        results
-    }
-
-    /// Compare a distance with a batch of distances.
-    /// The default implementation is a loop over `less_than`.
-    /// Override for more efficient batch comparisons.
-    async fn less_than_batch(
-        &self,
-        distance: &Self::DistanceRef,
-        distances: &[Self::DistanceRef],
-    ) -> Vec<bool> {
-        let mut results = Vec::with_capacity(distances.len());
-        for other_distance in distances {
-            results.push(self.less_than(distance, other_distance).await);
-        }
-        results
+    async fn cleanup(&self) -> Result<()> {
+        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", self.schema_name()))
+            .execute(self.pool())
+            .await?;
+        Ok(())
     }
 }
