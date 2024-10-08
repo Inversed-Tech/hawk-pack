@@ -78,6 +78,18 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .execute(&self.pool)
         .await
         .expect("Failed to set entry point");
+
+        let base_str = serde_json::to_string(&entry_point.vector_ref).unwrap();
+        sqlx::query(
+            "
+            UPDATE hawk_graph_links SET layer=$1 WHERE source_ref=$2
+        ",
+        )
+        .bind(entry_point.layer_count as i32)
+        .bind(base_str)
+        .execute(&self.pool)
+        .await
+        .expect("Failed to set links");
     }
 
     async fn get_links(
