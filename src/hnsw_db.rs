@@ -10,12 +10,41 @@ use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Clone)]
-struct Params {
+pub struct HawkParams {
     ef: usize,
     M: usize,
     Mmax: usize,
     Mmax0: usize,
     m_L: f64,
+}
+
+impl Default for HawkParams {
+    fn default() -> Self {
+        HawkParams {
+            ef: 32,
+            M: 32,
+            Mmax: 32,
+            Mmax0: 32,
+            m_L: 0.3,
+        }
+    }
+}
+
+impl HawkParams {
+    pub fn new_searcher<V: VectorStore, G: GraphStore<V>, R: RngCore>(
+        &self,
+        vector_store: V,
+        graph_store: G,
+        rng: &mut R,
+    ) -> HawkSearcher<V, G> {
+        let rng = AesRng::from_rng(rng).unwrap();
+        HawkSearcher {
+            params: self.clone(),
+            vector_store,
+            graph_store,
+            rng,
+        }
+    }
 }
 
 /// An implementation of the HNSW algorithm.
@@ -24,7 +53,7 @@ struct Params {
 /// Operations on the graph are delegate to a GraphStore.
 #[derive(Clone)]
 pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
-    params: Params,
+    params: HawkParams,
     pub vector_store: V,
     pub graph_store: G,
     rng: AesRng,
@@ -32,19 +61,7 @@ pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
 
 impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     pub fn new<R: RngCore>(vector_store: V, graph_store: G, rng: &mut R) -> Self {
-        let rng = AesRng::from_rng(rng).unwrap();
-        HawkSearcher {
-            params: Params {
-                ef: 32,
-                M: 32,
-                Mmax: 32,
-                Mmax0: 32,
-                m_L: 0.3,
-            },
-            vector_store,
-            graph_store,
-            rng,
-        }
+        HawkParams::default().new_searcher(vector_store, graph_store, rng)
     }
 
     async fn connect_bidir(
@@ -236,10 +253,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_hnsw_db() {
+        let params = HawkParams::default();
         let vector_store = LazyMemoryStore::new();
         let graph_store = GraphMem::new();
         let mut rng = AesRng::seed_from_u64(0_u64);
-        let mut db = HawkSearcher::new(vector_store, graph_store, &mut rng);
+        let mut db = params.new_searcher(vector_store, graph_store, &mut rng);
 
         let queries = (0..100)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))

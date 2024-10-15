@@ -8,6 +8,8 @@ use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 
+use super::HawkParams;
+
 // TODO: handle channel errors.
 
 /// Coroutine-based implementation of HNSW.
@@ -20,7 +22,7 @@ use tokio_stream::wrappers::ReceiverStream;
 /// returns `None`. Each call to `next` will return an `Op` that represents the
 /// operation that the search routine is waiting for. The caller is responsible for
 /// executing the operation and sending the result back to the routine.
-pub fn search_to_insert_stream<Q, V, D>(query: Q) -> HawkStream<Q, V, D>
+pub fn search_to_insert_stream<Q, V, D>(params: HawkParams, query: Q) -> HawkStream<Q, V, D>
 where
     Q: Ref + Send + 'static,
     V: Ref + Send + 'static,
@@ -29,7 +31,7 @@ where
     let (tx, rx) = mpsc::channel(1);
     tokio::spawn(async move {
         let mut rng = AesRng::from_random_seed();
-        let hawk = HawkSearcher::new(
+        let hawk = params.new_searcher(
             OpsCollector { ops: tx.clone() },
             OpsCollector { ops: tx.clone() },
             &mut rng,
@@ -204,7 +206,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_to_insert_stream_empty() {
-        let mut stream = search_to_insert_stream::<Q, V, D>(0);
+        let params = HawkParams::default();
+        let mut stream = search_to_insert_stream::<Q, V, D>(params, 0);
 
         let op = stream.next().await.unwrap();
         match op {
@@ -226,6 +229,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_search_to_insert_stream() {
+        let params = HawkParams::default();
         let some_vec = 0;
         let some_query = 1;
         let some_distance = 10;
@@ -234,7 +238,7 @@ mod tests {
             layer_count: 1,
         };
 
-        let mut stream = search_to_insert_stream::<Q, V, D>(some_query);
+        let mut stream = search_to_insert_stream::<Q, V, D>(params, some_query);
 
         let op = stream.next().await.unwrap();
         match op {

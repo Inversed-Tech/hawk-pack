@@ -217,7 +217,7 @@ mod tests {
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
-    use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::hnsw_db::{FurthestQueue, HawkParams, HawkSearcher};
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;
@@ -274,10 +274,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_hnsw_db() {
+        let params = HawkParams::default();
         let graph = TestGraphPg::new().await.unwrap();
         let vector_store = LazyMemoryStore::new();
         let mut rng = AesRng::seed_from_u64(0_u64);
-        let mut db = HawkSearcher::new(vector_store, graph.owned(), &mut rng);
+        let mut db = params.new_searcher(vector_store, graph.owned(), &mut rng);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
