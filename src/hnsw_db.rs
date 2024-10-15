@@ -7,9 +7,13 @@ pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
+/// An implementation of the HNSW algorithm.
+///
+/// Operations on vectors are delegated to a VectorStore.
+/// Operations on the graph are delegate to a GraphStore.
+#[derive(Clone)]
 #[allow(non_snake_case)]
-#[derive(PartialEq, Clone)]
-struct Params {
+pub struct HawkSearcher {
     ef: usize,
     M: usize,
     Mmax: usize,
@@ -17,25 +21,14 @@ struct Params {
     m_L: f64,
 }
 
-/// An implementation of the HNSW algorithm.
-///
-/// Operations on vectors are delegated to a VectorStore.
-/// Operations on the graph are delegate to a GraphStore.
-#[derive(Clone)]
-pub struct HawkSearcher {
-    params: Params,
-}
-
 impl HawkSearcher {
     pub fn new() -> Self {
         HawkSearcher {
-            params: Params {
-                ef: 32,
-                M: 32,
-                Mmax: 32,
-                Mmax0: 32,
-                m_L: 0.3,
-            },
+            ef: 32,
+            M: 32,
+            Mmax: 32,
+            Mmax0: 32,
+            m_L: 0.3,
         }
     }
 
@@ -47,14 +40,10 @@ impl HawkSearcher {
         mut neighbors: FurthestQueueV<V>,
         lc: usize,
     ) {
-        neighbors.trim_to_k_nearest(self.params.M);
+        neighbors.trim_to_k_nearest(self.M);
         let neighbors = neighbors;
 
-        let max_links = if lc == 0 {
-            self.params.Mmax0
-        } else {
-            self.params.Mmax
-        };
+        let max_links = if lc == 0 { self.Mmax0 } else { self.Mmax };
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
@@ -70,7 +59,7 @@ impl HawkSearcher {
 
     fn select_layer(&self, rng: &mut impl RngCore) -> usize {
         let random = rng.gen::<f64>();
-        (-random.ln() * self.params.m_L) as usize
+        (-random.ln() * self.m_L) as usize
     }
 
     fn ef_for_layer(&self, _lc: usize) -> usize {
@@ -80,7 +69,7 @@ impl HawkSearcher {
         // - during insertion, mutated versus non-mutated layers,
         // - the requested K nearest neighbors.
         // Here, we treat search and insertion the same way and we use the highest parameter everywhere.
-        self.params.ef
+        self.ef
     }
 
     #[allow(non_snake_case)]
