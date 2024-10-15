@@ -214,6 +214,8 @@ pub mod test_utils {
 #[cfg(test)]
 #[cfg(feature = "db_dependent")]
 mod tests {
+    use std::ops::DerefMut;
+
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
@@ -274,28 +276,39 @@ mod tests {
 
     #[tokio::test]
     async fn test_hnsw_db() {
-        let graph = TestGraphPg::new().await.unwrap();
-        let vector_store = LazyMemoryStore::new();
-        let mut rng = AesRng::seed_from_u64(0_u64);
-        let mut db = HawkSearcher::new(vector_store, graph.owned(), &mut rng);
+        let mut graph = TestGraphPg::new().await.unwrap();
+        let vector_store = &mut LazyMemoryStore::new();
+        let rng = &mut AesRng::seed_from_u64(0_u64);
+        let db = HawkSearcher::new();
 
         let queries = (0..10)
-            .map(|raw_query| db.vector_store.prepare_query(raw_query))
+            .map(|raw_query| vector_store.prepare_query(raw_query))
             .collect::<Vec<_>>();
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(query).await;
-            assert!(!db.is_match(&neighbors).await);
+            let neighbors = db
+                .search_to_insert(vector_store, graph.deref_mut(), query)
+                .await;
+            assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
-            let inserted = db.vector_store.insert(query).await;
-            db.insert_from_search_results(inserted, neighbors).await;
+            let inserted = vector_store.insert(query).await;
+            db.insert_from_search_results(
+                vector_store,
+                graph.deref_mut(),
+                rng,
+                inserted,
+                neighbors,
+            )
+            .await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(query).await;
-            assert!(db.is_match(&neighbors).await);
+            let neighbors = db
+                .search_to_insert(vector_store, graph.deref_mut(), query)
+                .await;
+            assert!(db.is_match(vector_store, &neighbors).await);
         }
 
         graph.cleanup().await.unwrap();
