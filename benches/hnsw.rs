@@ -16,7 +16,7 @@ fn hnsw_db(c: &mut Criterion) {
         let vector_store = &mut LazyMemoryStore::new();
         let graph_store = &mut GraphMem::new();
         let rng = &mut AesRng::seed_from_u64(0_u64);
-        let initial_db = &HawkSearcher::new();
+        let initial_db = &HawkSearcher::default();
 
         let queries = (0..database_size)
             .map(|raw_query| vector_store.prepare_query(raw_query))
