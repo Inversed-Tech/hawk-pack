@@ -21,17 +21,20 @@ pub struct HawkSearcher {
     m_L: f64,
 }
 
-impl HawkSearcher {
-    pub fn new() -> Self {
-        HawkSearcher {
+impl Default for HawkSearcher {
+    fn default() -> Self {
+         HawkSearcher {
             ef: 32,
             M: 32,
             Mmax: 32,
             Mmax0: 32,
             m_L: 0.3,
         }
-    }
 
+    }
+}
+
+impl HawkSearcher {
     async fn connect_bidir<V: VectorStore, G: GraphStore<V>>(
         &self,
         vector_store: &mut V,
@@ -222,7 +225,7 @@ impl HawkSearcher {
 
     pub async fn is_match<V: VectorStore>(
         &self,
-        vector_store: &mut V,
+        vector_store: &V,
         neighbors: &[FurthestQueueV<V>],
     ) -> bool {
         match neighbors
@@ -249,7 +252,7 @@ mod tests {
         let vector_store = &mut LazyMemoryStore::new();
         let graph_store = &mut GraphMem::new();
         let rng = &mut AesRng::seed_from_u64(0_u64);
-        let db = HawkSearcher::new();
+        let db = HawkSearcher::default();
 
         let queries = (0..100)
             .map(|raw_query| vector_store.prepare_query(raw_query))
