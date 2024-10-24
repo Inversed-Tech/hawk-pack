@@ -23,14 +23,13 @@ pub struct HawkSearcher {
 
 impl Default for HawkSearcher {
     fn default() -> Self {
-         HawkSearcher {
+        HawkSearcher {
             ef: 32,
             M: 32,
             Mmax: 32,
             Mmax0: 32,
             m_L: 0.3,
         }
-
     }
 }
 
