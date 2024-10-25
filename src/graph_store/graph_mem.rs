@@ -20,21 +20,31 @@ impl<V: VectorStore> GraphMem<V> {
     }
 }
 
-// Plain converter for a Graph structure that has the same distance ref and vector ref
+// Plain converter for a Graph structure that has different distance ref and vector ref types.
+// WARNING: distance metric is assumed to stay the same; thus, conversion doesn't change the graph structure.
 // Needed when switching from a PlaintextStore to a secret shared VectorStore.
 impl<V: VectorStore> GraphMem<V> {
-    pub fn from_another<U>(graph: GraphMem<U>) -> Self
+    pub fn from_another<U>(
+        graph: GraphMem<U>,
+        vector_map: fn(U::VectorRef) -> V::VectorRef,
+        distance_map: fn(U::DistanceRef) -> V::DistanceRef,
+    ) -> Self
     where
         U: VectorStore,
-        U: VectorStore<DistanceRef = V::DistanceRef>,
-        U: VectorStore<VectorRef = V::VectorRef>,
     {
-        let new_entry = graph.entry_point as Option<EntryPoint<V::VectorRef>>;
+        let new_entry = graph.entry_point.map(|ep| EntryPoint {
+            vector_ref: vector_map(ep.vector_ref),
+            layer_count: ep.layer_count,
+        });
         let layers: Vec<_> = graph
             .layers
             .into_iter()
             .map(|v| {
-                let links: HashMap<_, _> = v.links.into_iter().collect();
+                let links: HashMap<_, _> = v
+                    .links
+                    .into_iter()
+                    .map(|(v, q)| (vector_map(v), q.map::<V>(vector_map, distance_map)))
+                    .collect();
                 Layer::<V> { links }
             })
             .collect();
