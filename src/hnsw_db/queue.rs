@@ -64,6 +64,7 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
         self.queue.truncate(k);
     }
 
+    // Assumes that distance map doesn't change the distance metric
     pub fn map<V>(
         self,
         vector_map: fn(Vector) -> V::VectorRef,
