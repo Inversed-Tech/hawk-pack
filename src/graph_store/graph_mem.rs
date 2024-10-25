@@ -19,6 +19,16 @@ impl<V: VectorStore> GraphMem<V> {
         }
     }
 
+    pub fn from_precomputed(
+        entry_point: Option<EntryPoint<V::VectorRef>>,
+        layers: Vec<Layer<V>>,
+    ) -> Self {
+        GraphMem {
+            entry_point,
+            layers,
+        }
+    }
+
     pub fn get_layers(&self) -> Vec<Layer<V>> {
         self.layers.clone()
     }
