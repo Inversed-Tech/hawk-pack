@@ -83,6 +83,10 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
             .collect();
         FurthestQueue::from_ascending_vec(queue)
     }
+
+    pub fn as_vec_ref(&self) -> &[(Vector, Distance)] {
+        &self.queue
+    }
 }
 
 // Utility implementations.

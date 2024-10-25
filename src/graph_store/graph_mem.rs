@@ -116,4 +116,8 @@ impl<V: VectorStore> Layer<V> {
     fn set_links(&mut self, from: V::VectorRef, links: FurthestQueueV<V>) {
         self.links.insert(from, links);
     }
+
+    pub fn get_links_map(&self) -> &HashMap<V::VectorRef, FurthestQueueV<V>> {
+        &self.links
+    }
 }
