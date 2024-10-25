@@ -24,13 +24,11 @@ impl<V: VectorStore> GraphMem<V> {
 // WARNING: distance metric is assumed to stay the same; thus, conversion doesn't change the graph structure.
 // Needed when switching from a PlaintextStore to a secret shared VectorStore.
 impl<V: VectorStore> GraphMem<V> {
-    pub fn from_another<U>(
-        graph: GraphMem<U>,
-        vector_map: fn(U::VectorRef) -> V::VectorRef,
-        distance_map: fn(U::DistanceRef) -> V::DistanceRef,
-    ) -> Self
+    pub fn from_another<U, F1, F2>(graph: GraphMem<U>, vector_map: F1, distance_map: F2) -> Self
     where
         U: VectorStore,
+        F1: Fn(U::VectorRef) -> V::VectorRef + Copy,
+        F2: Fn(U::DistanceRef) -> V::DistanceRef + Copy,
     {
         let new_entry = graph.entry_point.map(|ep| EntryPoint {
             vector_ref: vector_map(ep.vector_ref),
@@ -43,7 +41,7 @@ impl<V: VectorStore> GraphMem<V> {
                 let links: HashMap<_, _> = v
                     .links
                     .into_iter()
-                    .map(|(v, q)| (vector_map(v), q.map::<V>(vector_map, distance_map)))
+                    .map(|(v, q)| (vector_map(v), q.map::<V, F1, F2>(vector_map, distance_map)))
                     .collect();
                 Layer::<V> { links }
             })
