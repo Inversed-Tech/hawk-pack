@@ -63,6 +63,24 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     pub fn trim_to_k_nearest(&mut self, k: usize) {
         self.queue.truncate(k);
     }
+
+    // Assumes that distance map doesn't change the distance metric
+    pub fn map<V>(
+        self,
+        vector_map: fn(Vector) -> V::VectorRef,
+        distance_map: fn(Distance) -> V::DistanceRef,
+    ) -> FurthestQueue<V::VectorRef, V::DistanceRef>
+    where
+        V: VectorStore,
+    {
+        let queue: Vec<(V::VectorRef, V::DistanceRef)> = self
+            .queue
+            .iter()
+            .cloned()
+            .map(|(v, d)| (vector_map(v), distance_map(d)))
+            .collect();
+        FurthestQueue::from_ascending_vec(queue)
+    }
 }
 
 // Utility implementations.
