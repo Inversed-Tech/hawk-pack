@@ -18,6 +18,10 @@ impl<V: VectorStore> GraphMem<V> {
             layers: vec![],
         }
     }
+
+    pub fn get_layers(&self) -> Vec<Layer<V>> {
+        self.layers.clone()
+    }
 }
 
 // Plain converter for a Graph structure that has different distance ref and vector ref types.
