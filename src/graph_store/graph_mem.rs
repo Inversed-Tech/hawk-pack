@@ -109,6 +109,10 @@ impl<V: VectorStore> Layer<V> {
         }
     }
 
+    pub fn from_links(links: HashMap<V::VectorRef, FurthestQueueV<V>>) -> Self {
+        Layer { links }
+    }
+
     fn get_links(&self, from: &V::VectorRef) -> Option<&FurthestQueueV<V>> {
         self.links.get(from)
     }
