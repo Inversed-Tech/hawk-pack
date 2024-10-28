@@ -24,7 +24,7 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
         FurthestQueue { queue }
     }
 
-    /// Insert the element `to` with distance `dist` into the queue, maitaining the ascending order.
+    /// Insert the element `to` with distance `dist` into the queue, maintaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
     pub async fn insert<V>(&mut self, store: &V, to: Vector, dist: Distance)
