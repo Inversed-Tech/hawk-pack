@@ -7,7 +7,7 @@ use sqlx::postgres::PgRow;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Range};
 
 use super::EntryPoint;
 
@@ -164,6 +164,14 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .execute(&self.pool)
         .await
         .expect("Failed to set buffer");
+    }
+
+    async fn quick_delete(&mut self, _point: <V as VectorStore>::VectorRef) {
+        todo!()
+    }
+
+    async fn delete_cleanup(&mut self, _range: Range<usize>, _vector_store: &V) {
+        todo!()
     }
 }
 

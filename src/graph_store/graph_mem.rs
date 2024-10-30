@@ -3,12 +3,16 @@ use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
     VectorStore,
 };
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Range,
+};
 
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct GraphMem<V: VectorStore> {
     entry_point: Option<EntryPoint<V::VectorRef>>,
     layers: Vec<Layer<V>>,
+    tombstones: HashSet<V::VectorRef>,
 }
 
 impl<V: VectorStore> GraphMem<V> {
@@ -16,6 +20,7 @@ impl<V: VectorStore> GraphMem<V> {
         GraphMem {
             entry_point: None,
             layers: vec![],
+            tombstones: HashSet::new(),
         }
     }
 
@@ -26,6 +31,7 @@ impl<V: VectorStore> GraphMem<V> {
         GraphMem {
             entry_point,
             layers,
+            tombstones: HashSet::new(),
         }
     }
 
@@ -66,9 +72,17 @@ impl<V: VectorStore> GraphMem<V> {
                 Layer::<V> { links, buffer }
             })
             .collect();
+
+        let tombstones = graph
+            .tombstones
+            .into_iter()
+            .map(|v| vector_map(v))
+            .collect();
+
         GraphMem::<V> {
             entry_point: new_entry,
             layers,
+            tombstones,
         }
     }
 }
@@ -127,6 +141,60 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
     async fn set_buffer(&mut self, base: V::VectorRef, buffer: FurthestQueueV<V>, lc: usize) {
         let layer = &mut self.layers[lc];
         layer.set_buffer(base, buffer);
+    }
+
+    async fn quick_delete(&mut self, point: <V as VectorStore>::VectorRef) {
+        let entry_point = self.get_entry_point().await;
+        if point == entry_point.expect("No entry point").vector_ref {
+            let mut layer_count = 0;
+            for (lc, layer) in self.layers.iter().enumerate().rev() {
+                if !layer.links.is_empty() {
+                    layer_count = lc;
+                    break;
+                }
+            }
+            let vector_ref = self.layers[layer_count]
+                .links
+                .keys()
+                .next()
+                .unwrap()
+                .clone();
+            self.entry_point = Some(EntryPoint {
+                vector_ref,
+                layer_count,
+            });
+        }
+
+        self.tombstones.insert(point.clone());
+
+        for layer in self.layers.iter_mut() {
+            layer.links.remove(&point);
+        }
+    }
+
+    async fn delete_cleanup(&mut self, range: Range<usize>, vector_store: &V) {
+        for vector in vector_store.get_range(range).iter() {
+            for lc in 0..self.layers.len() {
+                let mut neighbors = self.get_links(&vector, lc).await;
+                let queue = neighbors.queue.clone();
+                for neighbor in queue.iter() {
+                    if self.tombstones.get(&neighbor.0).is_some() {
+                        neighbors.remove(neighbor.0.clone()).await;
+                        let mut buffer = self.get_buffer(&vector, lc).await;
+                        let nearest_point = buffer.get_nearest().cloned();
+                        if nearest_point.is_some() {
+                            let (point, distance) = nearest_point.unwrap();
+                            neighbors
+                                .insert(&vector_store.clone(), point.clone(), distance.clone())
+                                .await;
+                            buffer.remove(point.clone()).await;
+                        }
+                    }
+                }
+
+                self.layers[lc].set_links(vector.clone(), neighbors);
+            }
+        }
     }
 }
 
@@ -245,6 +313,22 @@ mod tests {
             distance2: &Self::DistanceRef,
         ) -> bool {
             *distance1 < *distance2
+        }
+
+        async fn num_entries(&self) -> usize {
+            self.points.len()
+        }
+
+        fn get_range(&self, range: std::ops::Range<usize>) -> Vec<Self::VectorRef> {
+            self.points
+                .iter()
+                .take(range.len())
+                .map(|(id, _)| TestPointId(*id))
+                .collect()
+        }
+
+        async fn delete(&mut self, vector: &Self::VectorRef) {
+            self.points.remove(&vector.0);
         }
     }
 

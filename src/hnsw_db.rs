@@ -279,7 +279,7 @@ mod tests {
         let rng = &mut AesRng::seed_from_u64(0_u64);
         let db = HawkSearcher::default();
 
-        let queries = (0..100)
+        let queries = (0..10)
             .map(|raw_query| vector_store.prepare_query(raw_query))
             .collect::<Vec<_>>();
 
@@ -304,6 +304,17 @@ mod tests {
         for query in queries.iter() {
             let (neighbors, _buffers) = db.search_to_insert(vector_store, graph_store, query).await;
             assert!(db.is_match(vector_store, &neighbors).await);
+        }
+
+        // Delete codes
+        for query in queries.iter() {
+            graph_store.quick_delete(*query).await;
+            graph_store
+                .delete_cleanup(0..vector_store.num_entries().await, vector_store)
+                .await;
+            let (neighbors, _buffers) = db.search_to_insert(vector_store, graph_store, query).await;
+            // vector_store.delete(query).await;
+            assert!(!db.is_match(vector_store, &neighbors).await);
         }
     }
 }

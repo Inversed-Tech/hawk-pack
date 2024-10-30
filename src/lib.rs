@@ -38,8 +38,17 @@ pub trait VectorStore: Clone + Debug {
     /// Example: an encrypted distance.
     type DistanceRef: Ref;
 
+    /// Number of entries in the vector store
+    async fn num_entries(&self) -> usize;
+
+    /// Return a range of entries in the vector store
+    fn get_range(&self, range: std::ops::Range<usize>) -> Vec<Self::VectorRef>;
+
     /// Persist a query as a new vector in the store, and return a reference to it.
     async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;
+
+    /// Delete a vector from the store
+    async fn delete(&mut self, vector: &Self::VectorRef);
 
     /// Evaluate the distance between a query and a vector.
     async fn eval_distance(

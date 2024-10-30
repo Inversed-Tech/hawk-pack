@@ -3,7 +3,7 @@ use crate::{
     hnsw_db::{FurthestQueue, HawkSearcher},
     GraphStore, Ref, VectorStore,
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -107,6 +107,10 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
         todo!()
     }
 
+    async fn delete(&mut self, _vector: &Self::VectorRef) {
+        todo!()
+    }
+
     async fn eval_distance(
         &self,
         query: &Self::QueryRef,
@@ -166,6 +170,14 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     async fn is_match(&self, _distance: &Self::DistanceRef) -> bool {
         todo!()
     }
+
+    async fn num_entries(&self) -> usize {
+        todo!()
+    }
+
+    fn get_range(&self, _range: std::ops::Range<usize>) -> Vec<Self::VectorRef> {
+        todo!()
+    }
 }
 
 impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<Q, V, D> {
@@ -217,6 +229,18 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
     async fn set_buffer(&mut self, base: V, buffer: FurthestQueue<V, D>, lc: usize) {
         let op = Op::SetBuffer { base, buffer, lc };
         self.ops.send(op).await.unwrap();
+    }
+
+    async fn quick_delete(&mut self, _point: <OpsCollector<Q, V, D> as VectorStore>::VectorRef) {
+        todo!()
+    }
+
+    async fn delete_cleanup(
+        &mut self,
+        _range: Range<usize>,
+        _vector_store: &OpsCollector<Q, V, D>,
+    ) {
+        todo!()
     }
 }
 

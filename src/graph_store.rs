@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::hnsw_db::FurthestQueueV;
 use crate::VectorStore;
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 
 pub mod graph_mem;
 mod graph_pg;
@@ -27,6 +27,10 @@ pub trait GraphStore<V: VectorStore> {
     ) -> FurthestQueueV<V>;
 
     async fn set_buffer(&mut self, base: V::VectorRef, buffer: FurthestQueueV<V>, lc: usize);
+
+    async fn quick_delete(&mut self, point: V::VectorRef);
+
+    async fn delete_cleanup(&mut self, range: Range<usize>, vector_store: &V);
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
