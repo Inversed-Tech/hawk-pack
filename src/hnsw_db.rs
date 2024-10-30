@@ -19,6 +19,7 @@ pub struct HawkSearcher {
     Mmax: usize,
     Mmax0: usize,
     m_L: f64,
+    buffer_size: usize,
 }
 
 impl Default for HawkSearcher {
@@ -29,6 +30,7 @@ impl Default for HawkSearcher {
             Mmax: 32,
             Mmax0: 32,
             m_L: 0.3,
+            buffer_size: 4,
         }
     }
 }
@@ -80,7 +82,8 @@ impl HawkSearcher {
         vector_store: &mut V,
         graph_store: &mut G,
         query: &V::QueryRef,
-    ) -> (FurthestQueueV<V>, usize) {
+    ) -> (FurthestQueueV<V>, FurthestQueueV<V>, usize) {
+        let buffer = FurthestQueueV::<V>::new();
         if let Some(entry_point) = graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
             let distance = vector_store.eval_distance(query, &entry_vector).await;
@@ -88,9 +91,9 @@ impl HawkSearcher {
             let mut W = FurthestQueueV::<V>::new();
             W.insert(vector_store, entry_vector, distance).await;
 
-            (W, entry_point.layer_count)
+            (W, buffer, entry_point.layer_count)
         } else {
-            (FurthestQueue::new(), 0)
+            (FurthestQueue::new(), buffer, 0)
         }
     }
 
@@ -102,6 +105,7 @@ impl HawkSearcher {
         graph_store: &mut G,
         q: &V::QueryRef,
         W: &mut FurthestQueueV<V>,
+        buffer: &mut FurthestQueueV<V>,
         ef: usize,
         lc: usize,
     ) {
@@ -149,7 +153,10 @@ impl HawkSearcher {
                     // When W is full, we decide whether to replace the furthest element.
                     if vector_store.less_than(&eq, &fq).await {
                         // Make room for the new better candidate…
-                        W.pop_furthest();
+                        let popped = W.pop_furthest().unwrap();
+                        // Insert popped element into buffer
+                        buffer.insert(vector_store, popped.0, popped.1).await;
+                        buffer.trim_to_k_nearest(self.buffer_size);
                     } else {
                         // …or ignore the candidate and do not continue on this path.
                         continue;
@@ -174,22 +181,34 @@ impl HawkSearcher {
         vector_store: &mut V,
         graph_store: &mut G,
         query: &V::QueryRef,
-    ) -> Vec<FurthestQueueV<V>> {
+    ) -> (Vec<FurthestQueueV<V>>, Vec<FurthestQueueV<V>>) {
         let mut links = vec![];
+        let mut buffers = vec![];
 
-        let (mut W, layer_count) = self.search_init(vector_store, graph_store, query).await;
+        let (mut W, mut buffer, layer_count) =
+            self.search_init(vector_store, graph_store, query).await;
 
         // From the top layer down to layer 0.
         for lc in (0..layer_count).rev() {
             let ef = self.ef_for_layer(lc);
-            self.search_layer(vector_store, graph_store, query, &mut W, ef, lc)
-                .await;
+            self.search_layer(
+                vector_store,
+                graph_store,
+                query,
+                &mut W,
+                &mut buffer,
+                ef,
+                lc,
+            )
+            .await;
 
             links.push(W.clone());
+            buffers.push(buffer.clone());
         }
 
         links.reverse(); // We inserted top-down, so reverse to match the layer indices (bottom=0).
-        links
+        buffers.reverse();
+        (links, buffers)
     }
 
     pub async fn insert_from_search_results<V: VectorStore, G: GraphStore<V>>(
@@ -199,6 +218,7 @@ impl HawkSearcher {
         rng: &mut impl RngCore,
         inserted_vector: V::VectorRef,
         links: Vec<FurthestQueueV<V>>,
+        buffers: Vec<FurthestQueueV<V>>,
     ) {
         let layer_count = links.len();
 
@@ -208,6 +228,12 @@ impl HawkSearcher {
         // Connect the new vector to its neighbors in each layer.
         for (lc, layer_links) in links.into_iter().enumerate().take(l + 1) {
             self.connect_bidir(vector_store, graph_store, &inserted_vector, layer_links, lc)
+                .await;
+        }
+
+        for (lc, buffer) in buffers.into_iter().enumerate().take(l + 1) {
+            graph_store
+                .set_buffer(inserted_vector.clone(), buffer, lc)
                 .await;
         }
 
@@ -259,17 +285,24 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(vector_store, graph_store, query).await;
+            let (neighbors, buffers) = db.search_to_insert(vector_store, graph_store, query).await;
             assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
-            db.insert_from_search_results(vector_store, graph_store, rng, inserted, neighbors)
-                .await;
+            db.insert_from_search_results(
+                vector_store,
+                graph_store,
+                rng,
+                inserted,
+                neighbors,
+                buffers,
+            )
+            .await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(vector_store, graph_store, query).await;
+            let (neighbors, _buffers) = db.search_to_insert(vector_store, graph_store, query).await;
             assert!(db.is_match(vector_store, &neighbors).await);
         }
     }

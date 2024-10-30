@@ -122,6 +122,49 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .await
         .expect("Failed to set links");
     }
+
+    async fn get_buffer(
+        &self,
+        base: &<V as VectorStore>::VectorRef,
+        lc: usize,
+    ) -> FurthestQueueV<V> {
+        let base_str = serde_json::to_string(base).unwrap();
+
+        sqlx::query(
+            "
+            SELECT buffer FROM hawk_graph_buffer WHERE source_ref = $1 AND layer = $2
+        ",
+        )
+        .bind(base_str)
+        .bind(lc as i32)
+        .fetch_optional(&self.pool)
+        .await
+        .expect("Failed to fetch buffer")
+        .map(|row: PgRow| {
+            let x: sqlx::types::Json<FurthestQueueV<V>> = row.get("buf");
+            x.as_ref().clone()
+        })
+        .unwrap_or_else(FurthestQueue::new)
+    }
+
+    async fn set_buffer(&mut self, base: V::VectorRef, buffer: FurthestQueueV<V>, lc: usize) {
+        let base_str = serde_json::to_string(&base).unwrap();
+
+        sqlx::query(
+            "
+            INSERT INTO hawk_graph_buffer (source_ref, layer, buf)
+            VALUES ($1, $2, $3) ON CONFLICT (source_ref, layer)
+            DO UPDATE SET
+            buf = EXCLUDED.buf
+        ",
+        )
+        .bind(base_str)
+        .bind(lc as i32)
+        .bind(sqlx::types::Json(&buffer))
+        .execute(&self.pool)
+        .await
+        .expect("Failed to set buffer");
+    }
 }
 
 fn sql_switch_schema(schema_name: &str) -> Result<String> {
@@ -287,7 +330,7 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db
+            let (neighbors, buffers) = db
                 .search_to_insert(vector_store, graph.deref_mut(), query)
                 .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
@@ -299,13 +342,14 @@ mod tests {
                 rng,
                 inserted,
                 neighbors,
+                buffers,
             )
             .await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db
+            let (neighbors, _buffers) = db
                 .search_to_insert(vector_store, graph.deref_mut(), query)
                 .await;
             assert!(db.is_match(vector_store, &neighbors).await);

@@ -57,7 +57,13 @@ impl<V: VectorStore> GraphMem<V> {
                     .into_iter()
                     .map(|(v, q)| (vector_map(v), q.map::<V, F1, F2>(vector_map, distance_map)))
                     .collect();
-                Layer::<V> { links }
+                let buffer: HashMap<_, _> = v
+                    .buffer
+                    .into_iter()
+                    .map(|(v, q)| (vector_map(v), q.map::<V, F1, F2>(vector_map, distance_map)))
+                    .collect();
+
+                Layer::<V> { links, buffer }
             })
             .collect();
         GraphMem::<V> {
@@ -104,23 +110,47 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         let layer = &mut self.layers[lc];
         layer.set_links(base, links);
     }
+
+    async fn get_buffer(
+        &self,
+        base: &<V as VectorStore>::VectorRef,
+        lc: usize,
+    ) -> FurthestQueueV<V> {
+        let layer = &self.layers[lc];
+        if let Some(buffer) = layer.get_buffer(base) {
+            buffer.clone()
+        } else {
+            FurthestQueue::new()
+        }
+    }
+
+    async fn set_buffer(&mut self, base: V::VectorRef, buffer: FurthestQueueV<V>, lc: usize) {
+        let layer = &mut self.layers[lc];
+        layer.set_buffer(base, buffer);
+    }
 }
 
 #[derive(PartialEq, Eq, Default, Clone, Debug)]
 pub struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
     links: HashMap<V::VectorRef, FurthestQueueV<V>>,
+    /// A buffer of pruned neighbors
+    buffer: HashMap<V::VectorRef, FurthestQueueV<V>>,
 }
 
 impl<V: VectorStore> Layer<V> {
     fn new() -> Self {
         Layer {
             links: HashMap::new(),
+            buffer: HashMap::new(),
         }
     }
 
     pub fn from_links(links: HashMap<V::VectorRef, FurthestQueueV<V>>) -> Self {
-        Layer { links }
+        Layer {
+            links,
+            buffer: HashMap::new(),
+        }
     }
 
     fn get_links(&self, from: &V::VectorRef) -> Option<&FurthestQueueV<V>> {
@@ -133,6 +163,14 @@ impl<V: VectorStore> Layer<V> {
 
     pub fn get_links_map(&self) -> &HashMap<V::VectorRef, FurthestQueueV<V>> {
         &self.links
+    }
+
+    fn get_buffer(&self, from: &V::VectorRef) -> Option<&FurthestQueueV<V>> {
+        self.buffer.get(from)
+    }
+
+    fn set_buffer(&mut self, from: V::VectorRef, buffer: FurthestQueueV<V>) {
+        self.buffer.insert(from, buffer);
     }
 }
 
@@ -219,7 +257,7 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
-            let neighbors = searcher
+            let (neighbors, buffer) = searcher
                 .search_to_insert(&mut vector_store, &mut graph_store, &query)
                 .await;
             let inserted = vector_store.insert(&query).await;
@@ -230,6 +268,7 @@ mod tests {
                     &mut rng,
                     inserted,
                     neighbors,
+                    buffer,
                 )
                 .await;
         }
@@ -255,7 +294,7 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
-            let neighbors = searcher
+            let (neighbors, buffer) = searcher
                 .search_to_insert(&mut vector_store, &mut graph_store, &query)
                 .await;
             let inserted = vector_store.insert(&query).await;
@@ -266,6 +305,7 @@ mod tests {
                     &mut rng,
                     inserted,
                     neighbors,
+                    buffer,
                 )
                 .await;
 

@@ -19,6 +19,14 @@ pub trait GraphStore<V: VectorStore> {
         -> FurthestQueueV<V>;
 
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize);
+
+    async fn get_buffer(
+        &self,
+        base: &<V as VectorStore>::VectorRef,
+        lc: usize,
+    ) -> FurthestQueueV<V>;
+
+    async fn set_buffer(&mut self, base: V::VectorRef, buffer: FurthestQueueV<V>, lc: usize);
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
