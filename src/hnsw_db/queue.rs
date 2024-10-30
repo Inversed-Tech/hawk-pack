@@ -65,13 +65,15 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     }
 
     // Assumes that distance map doesn't change the distance metric
-    pub fn map<V>(
+    pub fn map<V, F1, F2>(
         self,
-        vector_map: fn(Vector) -> V::VectorRef,
-        distance_map: fn(Distance) -> V::DistanceRef,
+        vector_map: F1,
+        distance_map: F2,
     ) -> FurthestQueue<V::VectorRef, V::DistanceRef>
     where
         V: VectorStore,
+        F1: Fn(Vector) -> V::VectorRef,
+        F2: Fn(Distance) -> V::DistanceRef,
     {
         let queue: Vec<(V::VectorRef, V::DistanceRef)> = self
             .queue
@@ -80,6 +82,10 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
             .map(|(v, d)| (vector_map(v), distance_map(d)))
             .collect();
         FurthestQueue::from_ascending_vec(queue)
+    }
+
+    pub fn as_vec_ref(&self) -> &[(Vector, Distance)] {
+        &self.queue
     }
 }
 
