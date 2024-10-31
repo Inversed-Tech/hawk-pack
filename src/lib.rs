@@ -49,15 +49,18 @@ pub trait VectorStore: Clone + Debug {
     ) -> Self::DistanceRef;
 
     /// Check whether a distance is a match, meaning the query is considered equivalent to a previously inserted vector.
-    async fn is_match(&self, distance: &Self::DistanceRef) -> bool;
+    async fn is_match(&mut self, distance: &Self::DistanceRef) -> bool;
 
     /// Compare two distances.
-    async fn less_than(&self, distance1: &Self::DistanceRef, distance2: &Self::DistanceRef)
-        -> bool;
+    async fn less_than(
+        &mut self,
+        distance1: &Self::DistanceRef,
+        distance2: &Self::DistanceRef,
+    ) -> bool;
 
     /// Find the insertion index for a target distance to maintain order in a list of ascending distances.
     async fn search_sorted(
-        &self,
+        &mut self,
         distances: &[Self::DistanceRef],
         target: &Self::DistanceRef,
     ) -> usize {
@@ -107,7 +110,7 @@ pub trait VectorStore: Clone + Debug {
     /// The default implementation is a loop over `less_than`.
     /// Override for more efficient batch comparisons.
     async fn less_than_batch(
-        &self,
+        &mut self,
         distance: &Self::DistanceRef,
         distances: &[Self::DistanceRef],
     ) -> Vec<bool> {

@@ -27,7 +27,7 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     /// Insert the element `to` with distance `dist` into the queue, maintaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert<V>(&mut self, store: &V, to: Vector, dist: Distance)
+    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
@@ -129,7 +129,7 @@ impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the descending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert<V>(&mut self, store: &V, to: Vector, dist: Distance)
+    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
@@ -190,14 +190,14 @@ mod tests {
 
         // Example usage for FurthestQueue
         let mut furthest_queue = FurthestQueue::new();
-        furthest_queue.insert(&store, vector, distance).await;
+        furthest_queue.insert(&mut store, vector, distance).await;
         println!("{:?}", furthest_queue.get_furthest());
         println!("{:?}", furthest_queue.get_k_nearest(1));
         println!("{:?}", furthest_queue.pop_furthest());
 
         // Example usage for NearestQueue
         let mut nearest_queue = NearestQueue::from_furthest_queue(&furthest_queue);
-        nearest_queue.insert(&store, vector, distance).await;
+        nearest_queue.insert(&mut store, vector, distance).await;
         println!("{:?}", nearest_queue.get_nearest());
         println!("{:?}", nearest_queue.pop_nearest());
     }

@@ -122,7 +122,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn less_than(
-        &self,
+        &mut self,
         distance1: &Self::DistanceRef,
         distance2: &Self::DistanceRef,
     ) -> bool {
@@ -133,7 +133,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn less_than_batch(
-        &self,
+        &mut self,
         distance: &Self::DistanceRef,
         distances: &[Self::DistanceRef],
     ) -> Vec<bool> {
@@ -149,7 +149,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
         get_reply.await.unwrap()
     }
 
-    async fn is_match(&self, _distance: &Self::DistanceRef) -> bool {
+    async fn is_match(&mut self, _distance: &Self::DistanceRef) -> bool {
         todo!()
     }
 }

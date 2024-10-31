@@ -197,12 +197,12 @@ mod tests {
             hamming_distance(vector_0, vector_1)
         }
 
-        async fn is_match(&self, distance: &Self::DistanceRef) -> bool {
+        async fn is_match(&mut self, distance: &Self::DistanceRef) -> bool {
             *distance == 0
         }
 
         async fn less_than(
-            &self,
+            &mut self,
             distance1: &Self::DistanceRef,
             distance2: &Self::DistanceRef,
         ) -> bool {

@@ -72,12 +72,12 @@ impl VectorStore for LazyMemoryStore {
         (*query, *vector)
     }
 
-    async fn is_match(&self, distance: &Self::DistanceRef) -> bool {
+    async fn is_match(&mut self, distance: &Self::DistanceRef) -> bool {
         self.actually_evaluate_distance(distance) == 0
     }
 
     async fn less_than(
-        &self,
+        &mut self,
         distance1: &Self::DistanceRef,
         distance2: &Self::DistanceRef,
     ) -> bool {

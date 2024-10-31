@@ -262,7 +262,9 @@ mod tests {
             let mut links = FurthestQueue::new();
 
             for j in 4..7 {
-                links.insert(&vector_store, vectors[j], distances[j]).await;
+                links
+                    .insert(&mut vector_store, vectors[j], distances[j])
+                    .await;
             }
 
             graph.set_links(vectors[i], links.clone(), 0).await;
