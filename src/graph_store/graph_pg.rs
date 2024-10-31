@@ -1,13 +1,13 @@
 use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
-    GraphStore, VectorStore,
+    DbStore, GraphStore, VectorStore,
 };
 use eyre::{eyre, Result};
 use sqlx::postgres::PgRow;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, path};
 
 use super::EntryPoint;
 
@@ -15,13 +15,15 @@ const MAX_CONNECTIONS: u32 = 5;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+#[derive(Clone)]
 pub struct GraphPg<V: VectorStore> {
+    schema_name: String,
     pool: sqlx::PgPool,
     phantom: PhantomData<V>,
 }
 
-impl<V: VectorStore> GraphPg<V> {
-    pub async fn new(url: &str, schema_name: &str) -> Result<Self> {
+impl<V: VectorStore> DbStore for GraphPg<V> {
+    async fn new(url: &str, schema_name: &str) -> Result<Self> {
         let connect_sql = sql_switch_schema(schema_name)?;
 
         let pool = PgPoolOptions::new()
@@ -43,9 +45,62 @@ impl<V: VectorStore> GraphPg<V> {
         MIGRATOR.run(&pool).await?;
 
         Ok(GraphPg {
+            schema_name: schema_name.to_owned(),
             pool,
             phantom: PhantomData,
         })
+    }
+
+    fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+
+    fn schema_name(&self) -> String {
+        self.schema_name.to_owned()
+    }
+
+    async fn copy_out(&self) -> Result<Vec<(String, String)>> {
+        use futures::stream::TryStreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        let tables = ["hawk_graph_entry", "hawk_graph_links"];
+        let mut paths = vec![];
+
+        for table_name in tables.iter() {
+            let file_name = format!("{}_{}.csv", self.schema_name.clone(), table_name);
+            let path = path::absolute(file_name.clone())?
+                .as_os_str()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            paths.push(path.clone());
+
+            let mut file = tokio::fs::File::create(path).await?;
+            let mut conn = self.pool.acquire().await?;
+
+            let mut copy_stream = conn
+                .copy_out_raw(&format!(
+                    "COPY {} TO STDOUT (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
+
+            while let Some(chunk) = copy_stream.try_next().await? {
+                file.write_all(&chunk).await?;
+            }
+        }
+
+        Ok(vec![
+            (tables[0].to_owned(), paths[0].clone()),
+            (tables[1].to_owned(), paths[1].clone()),
+        ])
+    }
+
+    async fn cleanup(&self) -> Result<()> {
+        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", self.schema_name))
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }
 
@@ -168,12 +223,9 @@ pub mod test_utils {
             Ok(TestGraphPg { graph, schema_name })
         }
 
-        pub async fn cleanup(&self) -> Result<()> {
-            cleanup(&self.graph.pool, &self.schema_name).await
-        }
-
         pub fn owned(&self) -> GraphPg<V> {
             GraphPg {
+                schema_name: self.schema_name.clone(),
                 pool: self.graph.pool.clone(),
                 phantom: PhantomData,
             }
@@ -200,14 +252,6 @@ pub mod test_utils {
 
     fn temporary_name() -> String {
         format!("{}_{}", SCHEMA_PREFIX, rand::random::<u32>())
-    }
-
-    async fn cleanup(pool: &sqlx::PgPool, schema_name: &str) -> Result<()> {
-        assert!(schema_name.starts_with(SCHEMA_PREFIX));
-        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", schema_name))
-            .execute(pool)
-            .await?;
-        Ok(())
     }
 }
 
@@ -311,6 +355,24 @@ mod tests {
             assert!(db.is_match(vector_store, &neighbors).await);
         }
 
+        let graph_table_paths = graph.copy_out().await.unwrap();
         graph.cleanup().await.unwrap();
+
+        // Test copy_in
+        {
+            let graph = TestGraphPg::new().await.unwrap();
+            graph.copy_in(graph_table_paths).await.unwrap();
+
+            let db = HawkSearcher::default();
+
+            // Search for the same codes and find matches.
+            for query in queries.iter() {
+                let neighbors = db
+                    .search_to_insert(&mut vector_store.clone(), &mut graph.owned(), query)
+                    .await;
+                assert!(db.is_match(vector_store, &neighbors).await);
+            }
+            graph.cleanup().await.unwrap();
+        }
     }
 }

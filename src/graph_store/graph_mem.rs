@@ -1,7 +1,7 @@
-use super::{EntryPoint, GraphStore};
+use super::{EntryPoint, GraphPg, GraphStore};
 use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
-    VectorStore,
+    DbStore, VectorStore,
 };
 use std::collections::HashMap;
 
@@ -64,6 +64,23 @@ impl<V: VectorStore> GraphMem<V> {
             entry_point: new_entry,
             layers,
         }
+    }
+
+    pub async fn write_to_db(
+        &self,
+        url: &str,
+        schema_name: &str,
+    ) -> eyre::Result<Vec<(String, String)>> {
+        let mut graph_pg = GraphPg::<V>::new(url, schema_name).await.unwrap();
+        graph_pg
+            .set_entry_point(self.entry_point.clone().expect("No entry point"))
+            .await;
+        for (lc, layer) in self.layers.iter().enumerate() {
+            for (base, links) in layer.links.iter() {
+                graph_pg.set_links(base.clone(), links.clone(), lc).await;
+            }
+        }
+        graph_pg.copy_out().await
     }
 }
 
