@@ -85,6 +85,7 @@ struct OpsCollector<Q, V, D> {
 }
 
 impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
+    type Data = ();
     type QueryRef = Q;
     type VectorRef = V;
     type DistanceRef = D;
@@ -150,6 +151,10 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn is_match(&self, _distance: &Self::DistanceRef) -> bool {
+        todo!()
+    }
+
+    fn prepare_query(&mut self, _raw_query: Self::Data) -> <Self as VectorStore>::QueryRef {
         todo!()
     }
 }
