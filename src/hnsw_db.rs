@@ -224,7 +224,7 @@ impl HawkSearcher {
 
     pub async fn is_match<V: VectorStore>(
         &self,
-        vector_store: &V,
+        vector_store: &mut V,
         neighbors: &[FurthestQueueV<V>],
     ) -> bool {
         match neighbors
