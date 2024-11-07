@@ -187,7 +187,7 @@ mod tests {
         }
 
         async fn eval_distance(
-            &self,
+            &mut self,
             query: &Self::QueryRef,
             vector: &Self::VectorRef,
         ) -> Self::DistanceRef {

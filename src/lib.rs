@@ -43,7 +43,7 @@ pub trait VectorStore: Clone + Debug {
 
     /// Evaluate the distance between a query and a vector.
     async fn eval_distance(
-        &self,
+        &mut self,
         query: &Self::QueryRef,
         vector: &Self::VectorRef,
     ) -> Self::DistanceRef;
@@ -95,7 +95,7 @@ pub trait VectorStore: Clone + Debug {
     /// The default implementation is a loop over `eval_distance`.
     /// Override for more efficient batch distance evaluations.
     async fn eval_distance_batch(
-        &self,
+        &mut self,
         query: &Self::QueryRef,
         vectors: &[Self::VectorRef],
     ) -> Vec<Self::DistanceRef> {
