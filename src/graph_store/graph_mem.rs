@@ -3,9 +3,10 @@ use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
     VectorStore,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Default, Clone, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct GraphMem<V: VectorStore> {
     entry_point: Option<EntryPoint<V::VectorRef>>,
     layers: Vec<Layer<V>>,
@@ -106,7 +107,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
     }
 }
 
-#[derive(PartialEq, Eq, Default, Clone, Debug)]
+#[derive(PartialEq, Eq, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
     links: HashMap<V::VectorRef, FurthestQueueV<V>>,

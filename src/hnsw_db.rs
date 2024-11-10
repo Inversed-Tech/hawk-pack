@@ -3,6 +3,7 @@ use std::collections::HashSet;
 mod queue;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
 use rand::{Rng, RngCore};
+use serde::{Deserialize, Serialize};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
@@ -11,7 +12,7 @@ use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 ///
 /// Operations on vectors are delegated to a VectorStore.
 /// Operations on the graph are delegate to a GraphStore.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct HawkSearcher {
     ef: usize,
