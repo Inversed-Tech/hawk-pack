@@ -8,6 +8,64 @@ pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
+#[allow(non_snake_case)]
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
+pub struct Params {
+    pub ef_constr: usize,    // exploration factor for insertion layers
+    pub ef_constr_gr: usize, // ...for upper layers during insertion
+    pub ef_search: usize,    // ...for layer zero during search
+    pub ef_search_gr: usize, // ...for upper layers during search
+    pub M: usize,            // number of neighbors for insertion
+    pub Mmax: usize,         // maximum number of neighbors at positive layers
+    pub Mmax0: usize,        // maximum number of neighbors at layer 0
+    pub m_L: f64,            // layer density parameter
+}
+
+#[allow(non_snake_case, clippy::too_many_arguments)]
+impl Params {
+    pub fn new(
+        ef_constr: usize,
+        ef_constr_gr: usize,
+        ef_search: usize,
+        ef_search_gr: usize,
+        M: usize,
+        Mmax: usize,
+        Mmax0: usize,
+        layer_density: f64,
+    ) -> Self {
+        let m_L = layer_density.ln().recip();
+        Self {
+            ef_constr,
+            ef_constr_gr,
+            ef_search,
+            ef_search_gr,
+            M,
+            Mmax,
+            Mmax0,
+            m_L,
+        }
+    }
+
+    /// Parameter configuration based on original HNSW paper:
+    /// - ef_construction exploration factor used for insertion layers
+    /// - ef_search exploration factor used for layer 0 in search
+    /// - Higher layers use exploration factor 1 for simple greedy search
+    /// - Mmax = M
+    /// - Mmax0 = 2*M
+    /// - m_L = 1 / ln(M) so that layer density decreases by a factor of M at
+    ///   each successive hierarchical layer
+    #[allow(dead_code)]
+    pub fn new_standard(ef_construction: usize, ef_search: usize, M: usize) -> Self {
+        Self::new(ef_construction, 1, ef_search, 1, M, M, 2 * M, M as f64)
+    }
+
+    /// Parameter configuration using fixed exploration factor for all layer
+    /// search operations, both for insertion and for search.
+    pub fn new_uniform(ef: usize, M: usize) -> Self {
+        Self::new(ef, ef, ef, ef, M, M, 2 * M, M as f64)
+    }
+}
+
 /// An implementation of the HNSW algorithm.
 ///
 /// Operations on vectors are delegated to a VectorStore.
@@ -15,21 +73,13 @@ use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 #[derive(Clone, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct HawkSearcher {
-    ef: usize,
-    M: usize,
-    Mmax: usize,
-    Mmax0: usize,
-    m_L: f64,
+    pub params: Params,
 }
 
 impl Default for HawkSearcher {
     fn default() -> Self {
         HawkSearcher {
-            ef: 32,
-            M: 32,
-            Mmax: 32,
-            Mmax0: 32,
-            m_L: 0.3,
+            params: Params::new_standard(64, 32, 32),
         }
     }
 }
@@ -43,10 +93,14 @@ impl HawkSearcher {
         mut neighbors: FurthestQueueV<V>,
         lc: usize,
     ) {
-        neighbors.trim_to_k_nearest(self.M);
+        neighbors.trim_to_k_nearest(self.params.M);
         let neighbors = neighbors;
 
-        let max_links = if lc == 0 { self.Mmax0 } else { self.Mmax };
+        let max_links = if lc == 0 {
+            self.params.Mmax0
+        } else {
+            self.params.Mmax
+        };
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
@@ -62,17 +116,12 @@ impl HawkSearcher {
 
     fn select_layer(&self, rng: &mut impl RngCore) -> usize {
         let random = rng.gen::<f64>();
-        (-random.ln() * self.m_L) as usize
+        (-random.ln() * self.params.m_L) as usize
     }
 
+    // TODO generalize ef selection
     fn ef_for_layer(&self, _lc: usize) -> usize {
-        // Note: the original HNSW paper uses a different ef parameter depending on:
-        // - bottom layer versus higher layers,
-        // - search versus insertion,
-        // - during insertion, mutated versus non-mutated layers,
-        // - the requested K nearest neighbors.
-        // Here, we treat search and insertion the same way and we use the highest parameter everywhere.
-        self.ef
+        self.params.ef_constr
     }
 
     #[allow(non_snake_case)]
