@@ -12,16 +12,20 @@ pub type NearestQueueV<V> =
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.
 #[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FurthestQueue<Vector, Distance> {
-    queue: Vec<(Vector, Distance)>,
+    pub(crate) queue: Vec<(Vector, Distance)>,
 }
 
-impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
+impl<Vector: Clone + PartialEq, Distance: Clone> FurthestQueue<Vector, Distance> {
     pub fn new() -> Self {
         FurthestQueue { queue: vec![] }
     }
 
     pub fn from_ascending_vec(queue: Vec<(Vector, Distance)>) -> Self {
         FurthestQueue { queue }
+    }
+
+    pub async fn remove(&mut self, point: Vector) {
+        self.queue.retain(|v| v.0 != point);
     }
 
     /// Insert the element `to` with distance `dist` into the queue, maintaining the ascending order.

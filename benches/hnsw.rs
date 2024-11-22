@@ -27,14 +27,21 @@ fn hnsw_db(c: &mut Criterion) {
 
         runtime.block_on(async {
             for query in queries.iter() {
-                let neighbors = initial_db
+                let (neighbors, buffers) = initial_db
                     .search_to_insert(vector_store, graph_store, query)
                     .await;
                 assert!(!initial_db.is_match(vector_store, &neighbors).await);
                 // Insert the new vector into the store.
                 let inserted = vector_store.insert(query).await;
                 initial_db
-                    .insert_from_search_results(vector_store, graph_store, rng, inserted, neighbors)
+                    .insert_from_search_results(
+                        vector_store,
+                        graph_store,
+                        rng,
+                        inserted,
+                        neighbors,
+                        buffers,
+                    )
                     .await;
             }
         });
@@ -45,7 +52,7 @@ fn hnsw_db(c: &mut Criterion) {
                     runtime.block_on(async move {
                         let raw_query = database_size;
                         let query = vector_store.prepare_query(raw_query);
-                        let neighbors = initial_db
+                        let (neighbors, buffers) = initial_db
                             .search_to_insert(vector_store, graph_store, &query)
                             .await;
                         let inserted = vector_store.insert(&query).await;
@@ -56,6 +63,7 @@ fn hnsw_db(c: &mut Criterion) {
                                 rng,
                                 inserted,
                                 neighbors,
+                                buffers,
                             )
                             .await;
                     });

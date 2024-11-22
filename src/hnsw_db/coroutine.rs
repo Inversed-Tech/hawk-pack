@@ -3,7 +3,7 @@ use crate::{
     hnsw_db::{FurthestQueue, HawkSearcher},
     GraphStore, Ref, VectorStore,
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -30,10 +30,15 @@ where
         let hawk = HawkSearcher::default();
         let vector_store = &mut OpsCollector { ops: tx.clone() };
         let graph_store = &mut OpsCollector { ops: tx.clone() };
-        let result = hawk
+        let (neighbors, _buffers) = hawk
             .search_to_insert(vector_store, graph_store, &query)
             .await;
-        tx.send(Op::SearchResult { query, result }).await.unwrap();
+        tx.send(Op::SearchResult {
+            query,
+            result: neighbors,
+        })
+        .await
+        .unwrap();
     });
     ReceiverStream::new(rx)
 }
@@ -71,7 +76,16 @@ pub enum Op<Query, Vector, Distance> {
         links: FurthestQueue<Vector, Distance>,
         lc: usize,
     },
-
+    GetBuffer {
+        base: Vector,
+        lc: usize,
+        reply: oneshot::Sender<FurthestQueue<Vector, Distance>>,
+    },
+    SetBuffer {
+        base: Vector,
+        buffer: FurthestQueue<Vector, Distance>,
+        lc: usize,
+    },
     // Result.
     SearchResult {
         query: Query,
@@ -90,6 +104,10 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     type DistanceRef = D;
 
     async fn insert(&mut self, _query: &Self::QueryRef) -> Self::VectorRef {
+        todo!()
+    }
+
+    async fn delete(&mut self, _vector: &Self::VectorRef) {
         todo!()
     }
 
@@ -152,6 +170,14 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     async fn is_match(&mut self, _distance: &Self::DistanceRef) -> bool {
         todo!()
     }
+
+    async fn num_entries(&self) -> usize {
+        todo!()
+    }
+
+    fn get_range(&self, _range: std::ops::Range<usize>) -> Vec<Self::VectorRef> {
+        todo!()
+    }
 }
 
 impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<Q, V, D> {
@@ -185,6 +211,36 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
     async fn set_links(&mut self, base: V, links: FurthestQueue<V, D>, lc: usize) {
         let op = Op::SetLinks { base, links, lc };
         self.ops.send(op).await.unwrap();
+    }
+
+    async fn get_buffer(&self, base: &V, lc: usize) -> FurthestQueue<V, D> {
+        let (reply, get_reply) = oneshot::channel();
+
+        let op = Op::GetBuffer {
+            base: base.clone(),
+            lc,
+            reply,
+        };
+
+        self.ops.send(op).await.unwrap();
+        get_reply.await.unwrap()
+    }
+
+    async fn set_buffer(&mut self, base: V, buffer: FurthestQueue<V, D>, lc: usize) {
+        let op = Op::SetBuffer { base, buffer, lc };
+        self.ops.send(op).await.unwrap();
+    }
+
+    async fn quick_delete(&mut self, _point: <OpsCollector<Q, V, D> as VectorStore>::VectorRef) {
+        todo!()
+    }
+
+    async fn delete_cleanup(
+        &mut self,
+        _range: Range<usize>,
+        _vector_store: &OpsCollector<Q, V, D>,
+    ) {
+        todo!()
     }
 }
 
