@@ -8,61 +8,110 @@ pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
+// specify construction and search parameters by layer up to this value minus 1
+// any higher layers will use the last set of parameters
+const N_PARAM_LAYERS: usize = 5;
+
 #[allow(non_snake_case)]
 #[derive(PartialEq, Clone, Serialize, Deserialize)]
 pub struct Params {
-    pub ef_constr: usize,    // exploration factor for insertion layers
-    pub ef_constr_gr: usize, // ...for upper layers during insertion
-    pub ef_search: usize,    // ...for layer zero during search
-    pub ef_search_gr: usize, // ...for upper layers during search
-    pub M: usize,            // number of neighbors for insertion
-    pub Mmax: usize,         // maximum number of neighbors at positive layers
-    pub Mmax0: usize,        // maximum number of neighbors at layer 0
-    pub m_L: f64,            // layer density parameter
+    pub M: [usize; N_PARAM_LAYERS], // number of neighbors for insertion
+    pub M_max: [usize; N_PARAM_LAYERS], // maximum number of neighbors
+    pub ef_constr_search: [usize; N_PARAM_LAYERS], // ef_constr for search layers
+    pub ef_constr_insert: [usize; N_PARAM_LAYERS], // ef_constr for insertion layers
+    pub ef_search: [usize; N_PARAM_LAYERS], // ef for search
+    pub m_L: f64,                   // layer density parameter
 }
 
 #[allow(non_snake_case, clippy::too_many_arguments)]
 impl Params {
-    pub fn new(
-        ef_constr: usize,
-        ef_constr_gr: usize,
-        ef_search: usize,
-        ef_search_gr: usize,
-        M: usize,
-        Mmax: usize,
-        Mmax0: usize,
-        layer_density: f64,
-    ) -> Self {
-        let m_L = layer_density.ln().recip();
-        Self {
-            ef_constr,
-            ef_constr_gr,
-            ef_search,
-            ef_search_gr,
-            M,
-            Mmax,
-            Mmax0,
-            m_L,
-        }
-    }
-
-    /// Parameter configuration based on original HNSW paper:
+    /// Construct a `Params` object corresponding to parameter configuration
+    /// providing the functionality described in the original HNSW paper:
     /// - ef_construction exploration factor used for insertion layers
     /// - ef_search exploration factor used for layer 0 in search
-    /// - Higher layers use exploration factor 1 for simple greedy search
-    /// - Mmax = M
-    /// - Mmax0 = 2*M
+    /// - Higher layers in both insertion and search use exploration factor 1,
+    ///   representing simple greedy search
+    /// - vertex degrees bounded by M_max = M in positive layer graphs
+    /// - vertex degrees bounded by M_max0 = 2*M in layer 0 graph
     /// - m_L = 1 / ln(M) so that layer density decreases by a factor of M at
     ///   each successive hierarchical layer
-    #[allow(dead_code)]
-    pub fn new_standard(ef_construction: usize, ef_search: usize, M: usize) -> Self {
-        Self::new(ef_construction, 1, ef_search, 1, M, M, 2 * M, M as f64)
+    pub fn new(ef_construction: usize, ef_search: usize, M: usize) -> Self {
+        let M_arr = [M; N_PARAM_LAYERS];
+        let mut M_max_arr = [M; N_PARAM_LAYERS];
+        M_max_arr[0] = 2 * M;
+        let ef_constr_search_arr = [1usize; N_PARAM_LAYERS];
+        let ef_constr_insert_arr = [ef_construction; N_PARAM_LAYERS];
+        let mut ef_search_arr = [1usize; N_PARAM_LAYERS];
+        ef_search_arr[0] = ef_search;
+        let m_L = Self::m_L_from_layer_density(M as f64);
+
+        Self {
+            M: M_arr,
+            M_max: M_max_arr,
+            ef_constr_search: ef_constr_search_arr,
+            ef_constr_insert: ef_constr_insert_arr,
+            ef_search: ef_search_arr,
+            m_L,
+        }
     }
 
     /// Parameter configuration using fixed exploration factor for all layer
     /// search operations, both for insertion and for search.
     pub fn new_uniform(ef: usize, M: usize) -> Self {
-        Self::new(ef, ef, ef, ef, M, M, 2 * M, M as f64)
+        let M_arr = [M; N_PARAM_LAYERS];
+        let mut M_max_arr = [M; N_PARAM_LAYERS];
+        M_max_arr[0] = 2 * M;
+        let ef_constr_search_arr = [ef; N_PARAM_LAYERS];
+        let ef_constr_insert_arr = [ef; N_PARAM_LAYERS];
+        let ef_search_arr = [ef; N_PARAM_LAYERS];
+        let m_L = Self::m_L_from_layer_density(M as f64);
+
+        Self {
+            M: M_arr,
+            M_max: M_max_arr,
+            ef_constr_search: ef_constr_search_arr,
+            ef_constr_insert: ef_constr_insert_arr,
+            ef_search: ef_search_arr,
+            m_L,
+        }
+    }
+
+    /// Compute the parameter m_L associated with an expected factor size
+    /// reduction per layer in the hierarchical graph.
+    ///
+    /// E.g. for graph hierarchy where each layer has a factor of 32 fewer
+    /// entries than the last, the `layer_density` input is 32.
+    fn m_L_from_layer_density(layer_density: f64) -> f64 {
+        layer_density.ln().recip()
+    }
+
+    pub fn get_M(&self, lc: usize) -> usize {
+        Self::get_val(&self.M, lc)
+    }
+
+    pub fn get_M_max(&self, lc: usize) -> usize {
+        Self::get_val(&self.M_max, lc)
+    }
+
+    pub fn get_ef_constr_search(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_constr_search, lc)
+    }
+
+    pub fn get_ef_constr_insert(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_constr_insert, lc)
+    }
+
+    pub fn get_ef_search(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_search, lc)
+    }
+
+    pub fn get_m_L(&self) -> f64 {
+        self.m_L
+    }
+
+    #[inline(always)]
+    fn get_val(arr: &[usize; N_PARAM_LAYERS], lc: usize) -> usize {
+        *arr.get(lc).unwrap_or_else(|| arr.last().unwrap())
     }
 }
 
@@ -71,19 +120,21 @@ impl Params {
 /// Operations on vectors are delegated to a VectorStore.
 /// Operations on the graph are delegate to a GraphStore.
 #[derive(Clone, Serialize, Deserialize)]
-#[allow(non_snake_case)]
 pub struct HawkSearcher {
     pub params: Params,
 }
 
+// TODO remove default value; this varies too much between applications
+// to make sense to specify something "obvious"
 impl Default for HawkSearcher {
     fn default() -> Self {
         HawkSearcher {
-            params: Params::new_standard(64, 32, 32),
+            params: Params::new(64, 32, 32),
         }
     }
 }
 
+#[allow(non_snake_case)]
 impl HawkSearcher {
     async fn connect_bidir<V: VectorStore, G: GraphStore<V>>(
         &self,
@@ -93,14 +144,10 @@ impl HawkSearcher {
         mut neighbors: FurthestQueueV<V>,
         lc: usize,
     ) {
-        neighbors.trim_to_k_nearest(self.params.M);
-        let neighbors = neighbors;
+        let M = self.params.get_M(lc);
+        let max_links = self.params.get_M_max(lc);
 
-        let max_links = if lc == 0 {
-            self.params.Mmax0
-        } else {
-            self.params.Mmax
-        };
+        neighbors.trim_to_k_nearest(M);
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
@@ -116,12 +163,7 @@ impl HawkSearcher {
 
     fn select_layer(&self, rng: &mut impl RngCore) -> usize {
         let random = rng.gen::<f64>();
-        (-random.ln() * self.params.m_L) as usize
-    }
-
-    // TODO generalize ef selection
-    fn ef_for_layer(&self, _lc: usize) -> usize {
-        self.params.ef_constr
+        (-random.ln() * self.params.get_m_L()) as usize
     }
 
     #[allow(non_snake_case)]
@@ -231,7 +273,9 @@ impl HawkSearcher {
 
         // From the top layer down to layer 0.
         for lc in (0..layer_count).rev() {
-            let ef = self.ef_for_layer(lc);
+            // TODO pass insertion layer of query so different ef values can be
+            // used for layers in which the query is and is not being inserted
+            let ef = self.params.get_ef_constr_insert(lc);
             self.search_layer(vector_store, graph_store, query, &mut W, ef, lc)
                 .await;
 
