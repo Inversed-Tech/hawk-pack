@@ -389,18 +389,26 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let insertion_layer = db.select_layer(rng);
-            let neighbors = db.search_to_insert(vector_store, graph_store, query, insertion_layer).await;
+            let neighbors = db
+                .search_to_insert(vector_store, graph_store, query, insertion_layer)
+                .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
-            db.insert_from_search_results(vector_store, graph_store, inserted, insertion_layer, neighbors)
-                .await;
+            db.insert_from_search_results(
+                vector_store,
+                graph_store,
+                inserted,
+                insertion_layer,
+                neighbors,
+            )
+            .await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
             let neighbors = db.search(vector_store, graph_store, query, 1).await;
-            assert!(db.is_match(vector_store, &vec![neighbors]).await);
+            assert!(db.is_match(vector_store, &[neighbors]).await);
         }
     }
 }
