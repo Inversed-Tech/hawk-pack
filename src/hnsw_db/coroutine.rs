@@ -30,8 +30,9 @@ where
         let hawk = HawkSearcher::default();
         let vector_store = &mut OpsCollector { ops: tx.clone() };
         let graph_store = &mut OpsCollector { ops: tx.clone() };
+        // TODO insertion layer is hardcoded here, need to handle correctly
         let result = hawk
-            .search_to_insert(vector_store, graph_store, &query)
+            .search_to_insert(vector_store, graph_store, &query, 0)
             .await;
         tx.send(Op::SearchResult { query, result }).await.unwrap();
     });

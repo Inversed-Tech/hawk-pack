@@ -220,16 +220,17 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
+            let insertion_layer = searcher.select_layer(&mut rng);
             let neighbors = searcher
-                .search_to_insert(&mut vector_store, &mut graph_store, &query)
+                .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
             searcher
                 .insert_from_search_results(
                     &mut vector_store,
                     &mut graph_store,
-                    &mut rng,
                     inserted,
+                    insertion_layer,
                     neighbors,
                 )
                 .await;
@@ -256,16 +257,17 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
+            let insertion_layer = searcher.select_layer(&mut rng);
             let neighbors = searcher
-                .search_to_insert(&mut vector_store, &mut graph_store, &query)
+                .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
             searcher
                 .insert_from_search_results(
                     &mut vector_store,
                     &mut graph_store,
-                    &mut rng,
                     inserted,
+                    insertion_layer,
                     neighbors,
                 )
                 .await;
