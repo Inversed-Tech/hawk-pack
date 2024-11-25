@@ -2,7 +2,8 @@
 use std::collections::HashSet;
 mod queue;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
-use rand::{Rng, RngCore};
+use rand::RngCore;
+use rand_distr::{Distribution, Geometric};
 use serde::{Deserialize, Serialize};
 pub mod coroutine;
 
@@ -20,7 +21,7 @@ pub struct Params {
     pub ef_constr_search: [usize; N_PARAM_LAYERS], // ef_constr for search layers
     pub ef_constr_insert: [usize; N_PARAM_LAYERS], // ef_constr for insertion layers
     pub ef_search: [usize; N_PARAM_LAYERS], // ef for search
-    pub m_L: f64,                   // layer density parameter
+    pub layer_probability: f64,     // p for geometric distribution of layer densities
 }
 
 #[allow(non_snake_case, clippy::too_many_arguments)]
@@ -43,7 +44,7 @@ impl Params {
         let ef_constr_insert_arr = [ef_construction; N_PARAM_LAYERS];
         let mut ef_search_arr = [1usize; N_PARAM_LAYERS];
         ef_search_arr[0] = ef_search;
-        let m_L = Self::m_L_from_layer_density(M as f64);
+        let layer_probability = (M as f64).recip();
 
         Self {
             M: M_arr,
@@ -51,7 +52,7 @@ impl Params {
             ef_constr_search: ef_constr_search_arr,
             ef_constr_insert: ef_constr_insert_arr,
             ef_search: ef_search_arr,
-            m_L,
+            layer_probability,
         }
     }
 
@@ -64,7 +65,7 @@ impl Params {
         let ef_constr_search_arr = [ef; N_PARAM_LAYERS];
         let ef_constr_insert_arr = [ef; N_PARAM_LAYERS];
         let ef_search_arr = [ef; N_PARAM_LAYERS];
-        let m_L = Self::m_L_from_layer_density(M as f64);
+        let layer_probability = (M as f64).recip();
 
         Self {
             M: M_arr,
@@ -72,17 +73,24 @@ impl Params {
             ef_constr_search: ef_constr_search_arr,
             ef_constr_insert: ef_constr_insert_arr,
             ef_search: ef_search_arr,
-            m_L,
+            layer_probability,
         }
     }
 
-    /// Compute the parameter m_L associated with an expected factor size
-    /// reduction per layer in the hierarchical graph.
+    /// Compute the parameter m_L associated with a geometric distribution
+    /// parameter q describing the random layer of newly inserted graph nodes.
     ///
     /// E.g. for graph hierarchy where each layer has a factor of 32 fewer
-    /// entries than the last, the `layer_density` input is 32.
-    fn m_L_from_layer_density(layer_density: f64) -> f64 {
-        layer_density.ln().recip()
+    /// entries than the last, the `layer_probability` input is 1/32.
+    pub fn m_L_from_layer_probability(layer_probability: f64) -> f64 {
+        -layer_probability.ln().recip()
+    }
+
+    /// Compute the parameter q for the geometric distribution used to select
+    /// the insertion layer for newly inserted graph nodes, from the parameter
+    /// m_L of the original HNSW paper.
+    pub fn layer_probability_from_m_L(m_L: f64) -> f64 {
+        (-m_L.recip()).exp()
     }
 
     pub fn get_M(&self, lc: usize) -> usize {
@@ -105,8 +113,12 @@ impl Params {
         Self::get_val(&self.ef_search, lc)
     }
 
+    pub fn get_layer_probability(&self) -> f64 {
+        self.layer_probability
+    }
+
     pub fn get_m_L(&self) -> f64 {
-        self.m_L
+        Self::m_L_from_layer_probability(self.layer_probability)
     }
 
     #[inline(always)]
@@ -162,8 +174,10 @@ impl HawkSearcher {
     }
 
     fn select_layer(&self, rng: &mut impl RngCore) -> usize {
-        let random = rng.gen::<f64>();
-        (-random.ln() * self.params.get_m_L()) as usize
+        let p_geom = 1f64 - self.params.get_layer_probability();
+        let geom_distr = Geometric::new(p_geom).unwrap();
+
+        geom_distr.sample(rng) as usize
     }
 
     #[allow(non_snake_case)]
