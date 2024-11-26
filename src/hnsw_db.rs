@@ -2,37 +2,153 @@
 use std::collections::HashSet;
 mod queue;
 pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
-use rand::{Rng, RngCore};
+use rand::RngCore;
+use rand_distr::{Distribution, Geometric};
+use serde::{Deserialize, Serialize};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
+
+// specify construction and search parameters by layer up to this value minus 1
+// any higher layers will use the last set of parameters
+const N_PARAM_LAYERS: usize = 5;
+
+#[allow(non_snake_case)]
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
+pub struct HawkerParams {
+    pub M: [usize; N_PARAM_LAYERS], // number of neighbors for insertion
+    pub M_max: [usize; N_PARAM_LAYERS], // maximum number of neighbors
+    pub ef_constr_search: [usize; N_PARAM_LAYERS], // ef_constr for search layers
+    pub ef_constr_insert: [usize; N_PARAM_LAYERS], // ef_constr for insertion layers
+    pub ef_search: [usize; N_PARAM_LAYERS], // ef for search
+    pub layer_probability: f64,     // p for geometric distribution of layer densities
+}
+
+#[allow(non_snake_case, clippy::too_many_arguments)]
+impl HawkerParams {
+    /// Construct a `Params` object corresponding to parameter configuration
+    /// providing the functionality described in the original HNSW paper:
+    /// - ef_construction exploration factor used for insertion layers
+    /// - ef_search exploration factor used for layer 0 in search
+    /// - higher layers in both insertion and search use exploration factor 1,
+    ///   representing simple greedy search
+    /// - vertex degrees bounded by M_max = M in positive layer graphs
+    /// - vertex degrees bounded by M_max0 = 2*M in layer 0 graph
+    /// - m_L = 1 / ln(M) so that layer density decreases by a factor of M at
+    ///   each successive hierarchical layer
+    pub fn new(ef_construction: usize, ef_search: usize, M: usize) -> Self {
+        let M_arr = [M; N_PARAM_LAYERS];
+        let mut M_max_arr = [M; N_PARAM_LAYERS];
+        M_max_arr[0] = 2 * M;
+        let ef_constr_search_arr = [1usize; N_PARAM_LAYERS];
+        let ef_constr_insert_arr = [ef_construction; N_PARAM_LAYERS];
+        let mut ef_search_arr = [1usize; N_PARAM_LAYERS];
+        ef_search_arr[0] = ef_search;
+        let layer_probability = (M as f64).recip();
+
+        Self {
+            M: M_arr,
+            M_max: M_max_arr,
+            ef_constr_search: ef_constr_search_arr,
+            ef_constr_insert: ef_constr_insert_arr,
+            ef_search: ef_search_arr,
+            layer_probability,
+        }
+    }
+
+    /// Parameter configuration using fixed exploration factor for all layer
+    /// search operations, both for insertion and for search.
+    pub fn new_uniform(ef: usize, M: usize) -> Self {
+        let M_arr = [M; N_PARAM_LAYERS];
+        let mut M_max_arr = [M; N_PARAM_LAYERS];
+        M_max_arr[0] = 2 * M;
+        let ef_constr_search_arr = [ef; N_PARAM_LAYERS];
+        let ef_constr_insert_arr = [ef; N_PARAM_LAYERS];
+        let ef_search_arr = [ef; N_PARAM_LAYERS];
+        let layer_probability = (M as f64).recip();
+
+        Self {
+            M: M_arr,
+            M_max: M_max_arr,
+            ef_constr_search: ef_constr_search_arr,
+            ef_constr_insert: ef_constr_insert_arr,
+            ef_search: ef_search_arr,
+            layer_probability,
+        }
+    }
+
+    /// Compute the parameter m_L associated with a geometric distribution
+    /// parameter q describing the random layer of newly inserted graph nodes.
+    ///
+    /// E.g. for graph hierarchy where each layer has a factor of 32 fewer
+    /// entries than the last, the `layer_probability` input is 1/32.
+    pub fn m_L_from_layer_probability(layer_probability: f64) -> f64 {
+        -layer_probability.ln().recip()
+    }
+
+    /// Compute the parameter q for the geometric distribution used to select
+    /// the insertion layer for newly inserted graph nodes, from the parameter
+    /// m_L of the original HNSW paper.
+    pub fn layer_probability_from_m_L(m_L: f64) -> f64 {
+        (-m_L.recip()).exp()
+    }
+
+    pub fn get_M(&self, lc: usize) -> usize {
+        Self::get_val(&self.M, lc)
+    }
+
+    pub fn get_M_max(&self, lc: usize) -> usize {
+        Self::get_val(&self.M_max, lc)
+    }
+
+    pub fn get_ef_constr_search(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_constr_search, lc)
+    }
+
+    pub fn get_ef_constr_insert(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_constr_insert, lc)
+    }
+
+    pub fn get_ef_search(&self, lc: usize) -> usize {
+        Self::get_val(&self.ef_search, lc)
+    }
+
+    pub fn get_layer_probability(&self) -> f64 {
+        self.layer_probability
+    }
+
+    pub fn get_m_L(&self) -> f64 {
+        Self::m_L_from_layer_probability(self.layer_probability)
+    }
+
+    #[inline(always)]
+    /// Select value at index `lc` from the input fixed-size array, or the last
+    /// index of this array if `lc` is larger than the array size.
+    fn get_val(arr: &[usize; N_PARAM_LAYERS], lc: usize) -> usize {
+        arr[lc.min(N_PARAM_LAYERS - 1)]
+    }
+}
 
 /// An implementation of the HNSW algorithm.
 ///
 /// Operations on vectors are delegated to a VectorStore.
 /// Operations on the graph are delegate to a GraphStore.
-#[derive(Clone)]
-#[allow(non_snake_case)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HawkSearcher {
-    ef: usize,
-    M: usize,
-    Mmax: usize,
-    Mmax0: usize,
-    m_L: f64,
+    pub params: HawkerParams,
 }
 
+// TODO remove default value; this varies too much between applications
+// to make sense to specify something "obvious"
 impl Default for HawkSearcher {
     fn default() -> Self {
         HawkSearcher {
-            ef: 32,
-            M: 32,
-            Mmax: 32,
-            Mmax0: 32,
-            m_L: 0.3,
+            params: HawkerParams::new(64, 32, 32),
         }
     }
 }
 
+#[allow(non_snake_case)]
 impl HawkSearcher {
     async fn connect_bidir<V: VectorStore, G: GraphStore<V>>(
         &self,
@@ -42,10 +158,10 @@ impl HawkSearcher {
         mut neighbors: FurthestQueueV<V>,
         lc: usize,
     ) {
-        neighbors.trim_to_k_nearest(self.M);
-        let neighbors = neighbors;
+        let M = self.params.get_M(lc);
+        let max_links = self.params.get_M_max(lc);
 
-        let max_links = if lc == 0 { self.Mmax0 } else { self.Mmax };
+        neighbors.trim_to_k_nearest(M);
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
@@ -59,19 +175,11 @@ impl HawkSearcher {
         graph_store.set_links(q.clone(), neighbors, lc).await;
     }
 
-    fn select_layer(&self, rng: &mut impl RngCore) -> usize {
-        let random = rng.gen::<f64>();
-        (-random.ln() * self.m_L) as usize
-    }
+    pub fn select_layer(&self, rng: &mut impl RngCore) -> usize {
+        let p_geom = 1f64 - self.params.get_layer_probability();
+        let geom_distr = Geometric::new(p_geom).unwrap();
 
-    fn ef_for_layer(&self, _lc: usize) -> usize {
-        // Note: the original HNSW paper uses a different ef parameter depending on:
-        // - bottom layer versus higher layers,
-        // - search versus insertion,
-        // - during insertion, mutated versus non-mutated layers,
-        // - the requested K nearest neighbors.
-        // Here, we treat search and insertion the same way and we use the highest parameter everywhere.
-        self.ef
+        geom_distr.sample(rng) as usize
     }
 
     #[allow(non_snake_case)]
@@ -169,26 +277,52 @@ impl HawkSearcher {
     }
 
     #[allow(non_snake_case)]
+    pub async fn search<V: VectorStore, G: GraphStore<V>>(
+        &self,
+        vector_store: &mut V,
+        graph_store: &mut G,
+        query: &V::QueryRef,
+        k: usize,
+    ) -> FurthestQueueV<V> {
+        let (mut W, layer_count) = self.search_init(vector_store, graph_store, query).await;
+
+        // Search from the top layer down to layer 0
+        for lc in (0..layer_count).rev() {
+            let ef = self.params.get_ef_search(lc);
+            self.search_layer(vector_store, graph_store, query, &mut W, ef, lc)
+                .await;
+        }
+
+        W.trim_to_k_nearest(k);
+        W
+    }
+
+    #[allow(non_snake_case)]
     pub async fn search_to_insert<V: VectorStore, G: GraphStore<V>>(
         &self,
         vector_store: &mut V,
         graph_store: &mut G,
         query: &V::QueryRef,
+        insertion_layer: usize,
     ) -> Vec<FurthestQueueV<V>> {
         let mut links = vec![];
 
         let (mut W, layer_count) = self.search_init(vector_store, graph_store, query).await;
 
-        // From the top layer down to layer 0.
+        // Search from the top layer down to layer 0
         for lc in (0..layer_count).rev() {
-            let ef = self.ef_for_layer(lc);
+            let ef = if lc > insertion_layer {
+                self.params.get_ef_constr_search(lc)
+            } else {
+                self.params.get_ef_constr_insert(lc)
+            };
             self.search_layer(vector_store, graph_store, query, &mut W, ef, lc)
                 .await;
 
             links.push(W.clone());
         }
 
-        links.reverse(); // We inserted top-down, so reverse to match the layer indices (bottom=0).
+        links.reverse(); // We inserted top-down, so reverse to match the layer indices (bottom=0)
         links
     }
 
@@ -196,27 +330,24 @@ impl HawkSearcher {
         &self,
         vector_store: &mut V,
         graph_store: &mut G,
-        rng: &mut impl RngCore,
         inserted_vector: V::VectorRef,
+        insertion_layer: usize,
         links: Vec<FurthestQueueV<V>>,
     ) {
         let layer_count = links.len();
 
-        // Choose a maximum layer for the new vector. It may be greater than the current number of layers.
-        let l = self.select_layer(rng);
-
         // Connect the new vector to its neighbors in each layer.
-        for (lc, layer_links) in links.into_iter().enumerate().take(l + 1) {
+        for (lc, layer_links) in links.into_iter().enumerate().take(insertion_layer + 1) {
             self.connect_bidir(vector_store, graph_store, &inserted_vector, layer_links, lc)
                 .await;
         }
 
         // If the new vector goes into a layer higher than ever seen before, then it becomes the new entry point of the graph.
-        if l >= layer_count {
+        if insertion_layer >= layer_count {
             graph_store
                 .set_entry_point(EntryPoint {
                     vector_ref: inserted_vector,
-                    layer_count: l + 1,
+                    layer_count: insertion_layer + 1,
                 })
                 .await;
         }
@@ -259,18 +390,27 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(vector_store, graph_store, query).await;
+            let insertion_layer = db.select_layer(rng);
+            let neighbors = db
+                .search_to_insert(vector_store, graph_store, query, insertion_layer)
+                .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
-            db.insert_from_search_results(vector_store, graph_store, rng, inserted, neighbors)
-                .await;
+            db.insert_from_search_results(
+                vector_store,
+                graph_store,
+                inserted,
+                insertion_layer,
+                neighbors,
+            )
+            .await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(vector_store, graph_store, query).await;
-            assert!(db.is_match(vector_store, &neighbors).await);
+            let neighbors = db.search(vector_store, graph_store, query, 1).await;
+            assert!(db.is_match(vector_store, &[neighbors]).await);
         }
     }
 }

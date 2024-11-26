@@ -27,14 +27,21 @@ fn hnsw_db(c: &mut Criterion) {
 
         runtime.block_on(async {
             for query in queries.iter() {
+                let insertion_layer = initial_db.select_layer(rng);
                 let neighbors = initial_db
-                    .search_to_insert(vector_store, graph_store, query)
+                    .search_to_insert(vector_store, graph_store, query, insertion_layer)
                     .await;
                 assert!(!initial_db.is_match(vector_store, &neighbors).await);
                 // Insert the new vector into the store.
                 let inserted = vector_store.insert(query).await;
                 initial_db
-                    .insert_from_search_results(vector_store, graph_store, rng, inserted, neighbors)
+                    .insert_from_search_results(
+                        vector_store,
+                        graph_store,
+                        inserted,
+                        insertion_layer,
+                        neighbors,
+                    )
                     .await;
             }
         });
@@ -45,16 +52,17 @@ fn hnsw_db(c: &mut Criterion) {
                     runtime.block_on(async move {
                         let raw_query = database_size;
                         let query = vector_store.prepare_query(raw_query);
+                        let insertion_layer = initial_db.select_layer(rng);
                         let neighbors = initial_db
-                            .search_to_insert(vector_store, graph_store, &query)
+                            .search_to_insert(vector_store, graph_store, &query, insertion_layer)
                             .await;
                         let inserted = vector_store.insert(&query).await;
                         initial_db
                             .insert_from_search_results(
                                 vector_store,
                                 graph_store,
-                                rng,
                                 inserted,
+                                insertion_layer,
                                 neighbors,
                             )
                             .await;

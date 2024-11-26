@@ -289,8 +289,9 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
+            let insertion_layer = db.select_layer(rng);
             let neighbors = db
-                .search_to_insert(vector_store, graph.deref_mut(), query)
+                .search_to_insert(vector_store, graph.deref_mut(), query, insertion_layer)
                 .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
@@ -298,8 +299,8 @@ mod tests {
             db.insert_from_search_results(
                 vector_store,
                 graph.deref_mut(),
-                rng,
                 inserted,
+                insertion_layer,
                 neighbors,
             )
             .await;
@@ -307,10 +308,8 @@ mod tests {
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db
-                .search_to_insert(vector_store, graph.deref_mut(), query)
-                .await;
-            assert!(db.is_match(vector_store, &neighbors).await);
+            let neighbors = db.search(vector_store, graph.deref_mut(), query, 1).await;
+            assert!(db.is_match(vector_store, &[neighbors]).await);
         }
 
         graph.cleanup().await.unwrap();

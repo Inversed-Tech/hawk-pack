@@ -3,9 +3,10 @@ use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
     VectorStore,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Default, Clone, PartialEq, Eq, Debug)]
+#[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct GraphMem<V: VectorStore> {
     entry_point: Option<EntryPoint<V::VectorRef>>,
     layers: Vec<Layer<V>>,
@@ -106,7 +107,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
     }
 }
 
-#[derive(PartialEq, Eq, Default, Clone, Debug)]
+#[derive(PartialEq, Eq, Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
     links: HashMap<V::VectorRef, FurthestQueueV<V>>,
@@ -219,16 +220,17 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
+            let insertion_layer = searcher.select_layer(&mut rng);
             let neighbors = searcher
-                .search_to_insert(&mut vector_store, &mut graph_store, &query)
+                .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
             searcher
                 .insert_from_search_results(
                     &mut vector_store,
                     &mut graph_store,
-                    &mut rng,
                     inserted,
+                    insertion_layer,
                     neighbors,
                 )
                 .await;
@@ -255,16 +257,17 @@ mod tests {
 
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
+            let insertion_layer = searcher.select_layer(&mut rng);
             let neighbors = searcher
-                .search_to_insert(&mut vector_store, &mut graph_store, &query)
+                .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
             searcher
                 .insert_from_search_results(
                     &mut vector_store,
                     &mut graph_store,
-                    &mut rng,
                     inserted,
+                    insertion_layer,
                     neighbors,
                 )
                 .await;
