@@ -15,7 +15,7 @@ const N_PARAM_LAYERS: usize = 5;
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Clone, Serialize, Deserialize)]
-pub struct Params {
+pub struct HawkerParams {
     pub M: [usize; N_PARAM_LAYERS], // number of neighbors for insertion
     pub M_max: [usize; N_PARAM_LAYERS], // maximum number of neighbors
     pub ef_constr_search: [usize; N_PARAM_LAYERS], // ef_constr for search layers
@@ -25,12 +25,12 @@ pub struct Params {
 }
 
 #[allow(non_snake_case, clippy::too_many_arguments)]
-impl Params {
+impl HawkerParams {
     /// Construct a `Params` object corresponding to parameter configuration
     /// providing the functionality described in the original HNSW paper:
     /// - ef_construction exploration factor used for insertion layers
     /// - ef_search exploration factor used for layer 0 in search
-    /// - Higher layers in both insertion and search use exploration factor 1,
+    /// - higher layers in both insertion and search use exploration factor 1,
     ///   representing simple greedy search
     /// - vertex degrees bounded by M_max = M in positive layer graphs
     /// - vertex degrees bounded by M_max0 = 2*M in layer 0 graph
@@ -122,8 +122,10 @@ impl Params {
     }
 
     #[inline(always)]
+    /// Select value at index `lc` from the input fixed-size array, or the last
+    /// index of this array if `lc` is larger than the array size.
     fn get_val(arr: &[usize; N_PARAM_LAYERS], lc: usize) -> usize {
-        *arr.get(lc).unwrap_or_else(|| arr.last().unwrap())
+        arr[lc.min(N_PARAM_LAYERS - 1)]
     }
 }
 
@@ -133,7 +135,7 @@ impl Params {
 /// Operations on the graph are delegate to a GraphStore.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HawkSearcher {
-    pub params: Params,
+    pub params: HawkerParams,
 }
 
 // TODO remove default value; this varies too much between applications
@@ -141,7 +143,7 @@ pub struct HawkSearcher {
 impl Default for HawkSearcher {
     fn default() -> Self {
         HawkSearcher {
-            params: Params::new(64, 32, 32),
+            params: HawkerParams::new(64, 32, 32),
         }
     }
 }
