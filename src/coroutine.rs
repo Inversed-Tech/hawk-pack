@@ -1,7 +1,5 @@
 use crate::{
-    data_structures::queue::FurthestQueue,
-    hawk_searcher::standard::HawkSearcher,
-    traits::{EntryPoint, Ref},
+    data_structures::queue::FurthestQueue, hawk_searcher::standard::HawkSearcher, traits::Ref,
     GraphStore, VectorStore,
 };
 use std::fmt::Debug;
@@ -58,10 +56,11 @@ pub enum Op<Query, Vector, Distance> {
 
     // GraphStore operations.
     GetEntryPoint {
-        reply: oneshot::Sender<Option<EntryPoint<Vector>>>,
+        reply: oneshot::Sender<Option<(Vector, usize)>>,
     },
     SetEntryPoint {
-        entry_point: EntryPoint<Vector>,
+        point: Vector,
+        layer: usize,
     },
     GetLinks {
         base: Vector,
@@ -157,7 +156,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
 }
 
 impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<Q, V, D> {
-    async fn get_entry_point(&self) -> Option<EntryPoint<V>> {
+    async fn get_entry_point(&self) -> Option<(V, usize)> {
         let (reply, get_reply) = oneshot::channel();
 
         let op = Op::GetEntryPoint { reply };
@@ -166,8 +165,8 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
         get_reply.await.unwrap()
     }
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V>) {
-        let op = Op::SetEntryPoint { entry_point };
+    async fn set_entry_point(&mut self, point: V, layer: usize) {
+        let op = Op::SetEntryPoint { point, layer };
         self.ops.send(op).await.unwrap();
     }
 
@@ -229,17 +228,15 @@ mod tests {
         let some_vec = 0;
         let some_query = 1;
         let some_distance = 10;
-        let ep = EntryPoint {
-            vector_ref: some_vec,
-            layer_count: 1,
-        };
+        let entry_point = some_vec;
+        let entry_layer = 1;
 
         let mut stream = search_to_insert_stream::<Q, V, D>(some_query);
 
         let op = stream.next().await.unwrap();
         match op {
             GetEntryPoint { reply } => {
-                reply.send(Some(ep)).unwrap();
+                reply.send(Some((entry_point, entry_layer))).unwrap();
             }
             _ => panic!("Expected GetEntryPoint, got {:?}", op),
         }

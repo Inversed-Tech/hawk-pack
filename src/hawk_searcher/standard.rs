@@ -1,12 +1,13 @@
 // Converted from Python to Rust.
-use std::collections::HashSet;
-pub use crate::data_structures::queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
+pub use crate::data_structures::queue::{
+    FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV,
+};
 use rand::RngCore;
 use rand_distr::{Distribution, Geometric};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
-
-use crate::{traits::EntryPoint, GraphStore, VectorStore};
+use crate::{GraphStore, VectorStore};
 
 // specify construction and search parameters by layer up to this value minus 1
 // any higher layers will use the last set of parameters
@@ -188,14 +189,13 @@ impl HawkSearcher {
         graph_store: &mut G,
         query: &V::QueryRef,
     ) -> (FurthestQueueV<V>, usize) {
-        if let Some(entry_point) = graph_store.get_entry_point().await {
-            let entry_vector = entry_point.vector_ref;
-            let distance = vector_store.eval_distance(query, &entry_vector).await;
+        if let Some((entry_point, layer)) = graph_store.get_entry_point().await {
+            let distance = vector_store.eval_distance(query, &entry_point).await;
 
             let mut W = FurthestQueueV::<V>::new();
-            W.insert(vector_store, entry_vector, distance).await;
+            W.insert(vector_store, entry_point, distance).await;
 
-            (W, entry_point.layer_count)
+            (W, layer)
         } else {
             (FurthestQueue::new(), 0)
         }
@@ -344,10 +344,7 @@ impl HawkSearcher {
         // If the new vector goes into a layer higher than ever seen before, then it becomes the new entry point of the graph.
         if insertion_layer >= layer_count {
             graph_store
-                .set_entry_point(EntryPoint {
-                    vector_ref: inserted_vector,
-                    layer_count: insertion_layer + 1,
-                })
+                .set_entry_point(inserted_vector, insertion_layer + 1)
                 .await;
         }
     }

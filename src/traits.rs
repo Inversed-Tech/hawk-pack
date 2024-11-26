@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
+use crate::data_structures::queue::FurthestQueueV;
+use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
-use crate::data_structures::queue::FurthestQueueV;
 
 pub trait Ref:
     Clone + Debug + PartialEq + Eq + Hash + Sync + Serialize + for<'de> serde::Deserialize<'de>
@@ -115,29 +115,25 @@ pub trait VectorStore: Clone + Debug {
     }
 }
 
-// TODO HawkSearcher trait
-
-// TODO Comparisons trait
-
 #[allow(async_fn_in_trait)]
 pub trait GraphStore<V: VectorStore> {
     // Vertex type
     // Neighborhood type
 
-    async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>>;
+    /// Return vector reference and layer of HNSW entry point, if initialized
+    async fn get_entry_point(&self) -> Option<(V::VectorRef, usize)>;
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>);
+    /// Set HNSW entry point
+    async fn set_entry_point(&mut self, point: V::VectorRef, layer: usize);
 
-    // TODO make this an Option
-    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize)
-        -> FurthestQueueV<V>;
+    // TODO make this an Option to handle if lc layer is out of bounds
+    async fn get_links(&self, base: &V::VectorRef, lc: usize) -> FurthestQueueV<V>;
 
-    // TODO make this a Result to handle if lc is invalid for given base?  (Does default insert unconditionally?)
+    // TODO make this a Result to handle if lc is invalid for given base
+    // (Does default insert unconditionally?)
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize);
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EntryPoint<VectorRef> {
-    pub vector_ref: VectorRef,
-    pub layer_count: usize,
-}
+// TODO HawkSearcher trait
+
+// TODO Comparisons trait

@@ -1,10 +1,12 @@
 use crate::{
     data_structures::queue::{FurthestQueue, FurthestQueueV},
-    traits::{EntryPoint, GraphStore},
+    traits::GraphStore,
     VectorStore,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use super::EntryPoint;
 
 #[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct GraphMem<V: VectorStore> {
@@ -21,11 +23,14 @@ impl<V: VectorStore> GraphMem<V> {
     }
 
     pub fn from_precomputed(
-        entry_point: Option<EntryPoint<V::VectorRef>>,
+        entry_point: Option<(V::VectorRef, usize)>,
         layers: Vec<Layer<V>>,
     ) -> Self {
         GraphMem {
-            entry_point,
+            entry_point: entry_point.map(|ep| EntryPoint {
+                point: ep.0,
+                layer: ep.1,
+            }),
             layers,
         }
     }
@@ -45,11 +50,12 @@ impl<V: VectorStore> GraphMem<V> {
         F1: Fn(U::VectorRef) -> V::VectorRef + Copy,
         F2: Fn(U::DistanceRef) -> V::DistanceRef + Copy,
     {
-        let new_entry = graph.entry_point.map(|ep| EntryPoint {
-            vector_ref: vector_map(ep.vector_ref),
-            layer_count: ep.layer_count,
+        let new_entry_point = graph.entry_point.map(|ep| EntryPoint {
+            point: vector_map(ep.point),
+            layer: ep.layer,
         });
-        let layers: Vec<_> = graph
+
+        let new_layers: Vec<_> = graph
             .layers
             .into_iter()
             .map(|v| {
@@ -61,31 +67,34 @@ impl<V: VectorStore> GraphMem<V> {
                 Layer::<V> { links }
             })
             .collect();
+
         GraphMem::<V> {
-            entry_point: new_entry,
-            layers,
+            entry_point: new_entry_point,
+            layers: new_layers,
         }
     }
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
-    async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
-        self.entry_point.clone()
+    async fn get_entry_point(&self) -> Option<(V::VectorRef, usize)> {
+        self.entry_point
+            .as_ref()
+            .map(|ep| (ep.point.clone(), ep.layer))
     }
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>) {
+    async fn set_entry_point(&mut self, point: V::VectorRef, layer: usize) {
         if let Some(previous) = self.entry_point.as_ref() {
             assert!(
-                previous.layer_count < entry_point.layer_count,
+                previous.layer < layer,
                 "A new entry point should be on a higher layer than before."
             );
         }
 
-        while entry_point.layer_count > self.layers.len() {
+        while layer > self.layers.len() {
             self.layers.push(Layer::new());
         }
 
-        self.entry_point = Some(entry_point);
+        self.entry_point = Some(EntryPoint { point, layer });
     }
 
     async fn get_links(
@@ -284,15 +293,12 @@ mod tests {
         let new_graph_store: GraphMem<TestStore> =
             GraphMem::from_another(graph_store.clone(), |v| point_ids[&v], |d| distances[&d]);
 
-        let entry_point = graph_store.get_entry_point().await.unwrap();
-        let new_entry_point = new_graph_store.get_entry_point().await.unwrap();
+        let (entry_point, layer) = graph_store.get_entry_point().await.unwrap();
+        let (new_entry_point, new_layer) = new_graph_store.get_entry_point().await.unwrap();
 
         // Check that entry points are correct
-        assert_eq!(entry_point.layer_count, new_entry_point.layer_count);
-        assert_eq!(
-            point_ids[&entry_point.vector_ref],
-            new_entry_point.vector_ref
-        );
+        assert_eq!(layer, new_layer);
+        assert_eq!(point_ids[&entry_point], new_entry_point);
 
         let layers = graph_store.get_layers();
         let new_layers = new_graph_store.get_layers();

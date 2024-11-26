@@ -9,7 +9,7 @@ use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
 use std::marker::PhantomData;
 
-use crate::traits::EntryPoint;
+use super::EntryPoint;
 
 const MAX_CONNECTIONS: u32 = 5;
 
@@ -50,7 +50,7 @@ impl<V: VectorStore> GraphPg<V> {
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
-    async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
+    async fn get_entry_point(&self) -> Option<(V::VectorRef, usize)> {
         sqlx::query(
             "
                 SELECT entry_point FROM hawk_graph_entry WHERE id = 0
@@ -61,12 +61,11 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .expect("Failed to fetch entry point")
         .map(|row: PgRow| {
             let x: sqlx::types::Json<EntryPoint<V::VectorRef>> = row.get("entry_point");
-            let y: EntryPoint<V::VectorRef> = x.as_ref().clone();
-            y
+            (x.point.clone(), x.layer)
         })
     }
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>) {
+    async fn set_entry_point(&mut self, point: V::VectorRef, layer: usize) {
         sqlx::query(
             "
             INSERT INTO hawk_graph_entry (entry_point, id)
@@ -74,7 +73,7 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
             DO UPDATE SET entry_point = EXCLUDED.entry_point
         ",
         )
-        .bind(sqlx::types::Json(&entry_point))
+        .bind(sqlx::types::Json(&EntryPoint { point, layer }))
         .execute(&self.pool)
         .await
         .expect("Failed to set entry point");
@@ -218,9 +217,8 @@ mod tests {
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::{
-        data_structures::queue::FurthestQueue,
+        data_structures::queue::FurthestQueue, hawk_searcher::standard::HawkSearcher,
         vector_store::lazy_memory_store::LazyMemoryStore,
-        hawk_searcher::standard::HawkSearcher,
     };
     use aes_prng::AesRng;
     use rand::SeedableRng;
@@ -251,13 +249,18 @@ mod tests {
         let ep = graph.get_entry_point().await;
 
         let ep2 = EntryPoint {
-            vector_ref: vectors[0],
-            layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
+            point: vectors[0],
+            layer: ep.map(|e| e.1).unwrap_or_default() + 1,
         };
 
-        graph.set_entry_point(ep2.clone()).await;
+        graph.set_entry_point(ep2.point, ep2.layer).await;
 
-        let ep3 = graph.get_entry_point().await.unwrap();
+        let (point3, layer3) = graph.get_entry_point().await.unwrap();
+        let ep3 = EntryPoint {
+            point: point3,
+            layer: layer3,
+        };
+
         assert_eq!(ep2, ep3);
 
         for i in 1..4 {
