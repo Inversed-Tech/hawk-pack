@@ -1,6 +1,6 @@
-use super::{EntryPoint, GraphStore};
 use crate::{
-    hnsw_db::{FurthestQueue, FurthestQueueV},
+    data_structures::queue::{FurthestQueue, FurthestQueueV},
+    traits::{EntryPoint, GraphStore},
     VectorStore,
 };
 use serde::{Deserialize, Serialize};
@@ -144,8 +144,8 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        examples::lazy_memory_store::{LazyMemoryStore, PointId},
-        hnsw_db::HawkSearcher,
+        hawk_searcher::standard::HawkSearcher,
+        vector_store::lazy_memory_store::{LazyMemoryStore, PointId},
     };
 
     use super::*;

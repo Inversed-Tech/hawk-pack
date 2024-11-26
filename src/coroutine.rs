@@ -1,7 +1,8 @@
 use crate::{
-    graph_store::EntryPoint,
-    hnsw_db::{FurthestQueue, HawkSearcher},
-    GraphStore, Ref, VectorStore,
+    data_structures::queue::FurthestQueue,
+    hawk_searcher::standard::HawkSearcher,
+    traits::{EntryPoint, Ref},
+    GraphStore, VectorStore,
 };
 use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};

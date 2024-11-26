@@ -1,5 +1,5 @@
 use crate::{
-    hnsw_db::{FurthestQueue, FurthestQueueV},
+    data_structures::queue::{FurthestQueue, FurthestQueueV},
     GraphStore, VectorStore,
 };
 use eyre::{eyre, Result};
@@ -9,7 +9,7 @@ use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
 use std::marker::PhantomData;
 
-use super::EntryPoint;
+use crate::traits::EntryPoint;
 
 const MAX_CONNECTIONS: u32 = 5;
 
@@ -212,14 +212,16 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
-#[cfg(feature = "db_dependent")]
 mod tests {
     use std::ops::DerefMut;
 
     use super::test_utils::TestGraphPg;
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
-    use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::{
+        data_structures::queue::FurthestQueue,
+        vector_store::lazy_memory_store::LazyMemoryStore,
+        hawk_searcher::standard::HawkSearcher,
+    };
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;

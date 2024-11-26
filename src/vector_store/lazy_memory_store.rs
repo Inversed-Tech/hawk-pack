@@ -4,7 +4,8 @@ use crate::VectorStore;
 
 /// Example implementation of a vector store - Lazy variant.
 ///
-/// A distance is lazily represented in `DistanceRef` as a tuple of point IDs, and the actual distance is evaluated later in `less_than`.
+/// A distance is lazily represented in `DistanceRef` as a tuple of point IDs,
+/// and the actual distance is evaluated later in `less_than`.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct LazyMemoryStore {
     points: Vec<Point>,
@@ -14,7 +15,8 @@ pub struct LazyMemoryStore {
 struct Point {
     /// Whatever encoding of a vector.
     data: u64,
-    /// Distinguish between queries that are pending, and those that were ultimately accepted into the vector store.
+    /// Distinguish between queries that are pending, and those that were
+    /// ultimately accepted into the vector store.
     is_persistent: bool,
 }
 

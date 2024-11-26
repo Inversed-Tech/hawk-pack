@@ -1,13 +1,12 @@
 // Converted from Python to Rust.
 use std::collections::HashSet;
-mod queue;
-pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
+pub use crate::data_structures::queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
 use rand::RngCore;
 use rand_distr::{Distribution, Geometric};
 use serde::{Deserialize, Serialize};
-pub mod coroutine;
 
-use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
+
+use crate::{traits::EntryPoint, GraphStore, VectorStore};
 
 // specify construction and search parameters by layer up to this value minus 1
 // any higher layers will use the last set of parameters
@@ -371,8 +370,8 @@ impl HawkSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::graph_store::graph_mem::GraphMem;
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;
