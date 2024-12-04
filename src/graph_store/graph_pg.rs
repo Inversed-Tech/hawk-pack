@@ -217,7 +217,7 @@ mod tests {
     use super::test_utils::TestGraphPg;
     use super::*;
     use crate::{
-        data_structures::queue::FurthestQueue, hawk_searcher::standard::HawkSearcher,
+        data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher,
         vector_store::lazy_memory_store::LazyMemoryStore,
     };
     use aes_prng::AesRng;

@@ -1,5 +1,5 @@
 use crate::{
-    data_structures::queue::FurthestQueue, hawk_searcher::standard::HawkSearcher, traits::Ref,
+    data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher, traits::Ref,
     GraphStore, VectorStore,
 };
 use std::fmt::Debug;

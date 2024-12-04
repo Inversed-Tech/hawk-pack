@@ -153,7 +153,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        hawk_searcher::standard::HawkSearcher,
+        hawk_searcher::HawkSearcher,
         vector_store::lazy_memory_store::{LazyMemoryStore, PointId},
     };
 
