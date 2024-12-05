@@ -1,6 +1,6 @@
 use crate::{
-    data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher, traits::Ref,
-    GraphStore, VectorStore,
+    data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher, traits::Ref, GraphStore,
+    VectorStore,
 };
 use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
@@ -72,11 +72,14 @@ pub enum Op<Query, Vector, Distance> {
         links: FurthestQueue<Vector, Distance>,
         lc: usize,
     },
+    GetHeight {
+        reply: oneshot::Sender<usize>,
+    },
 
     // Result.
     SearchResult {
         query: Query,
-        result: Vec<FurthestQueue<Vector, Distance>>,
+        result: (Vec<FurthestQueue<Vector, Distance>>, bool),
     },
 }
 
@@ -187,6 +190,15 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
         let op = Op::SetLinks { base, links, lc };
         self.ops.send(op).await.unwrap();
     }
+
+    async fn num_layers(&self) -> usize {
+        let (reply, get_reply) = oneshot::channel();
+
+        let op = Op::GetHeight { reply };
+
+        self.ops.send(op).await.unwrap();
+        get_reply.await.unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -217,7 +229,11 @@ mod tests {
         match op {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, 0);
-                assert!(result.is_empty());
+                assert!(
+                    result.0 == vec![FurthestQueue::new()],
+                    "Search links incorrect"
+                );
+                assert!(result.1, "Vector not added as entry point");
             }
             _ => panic!("Expected SearchResult, got {:?}", op),
         }
@@ -229,7 +245,7 @@ mod tests {
         let some_query = 1;
         let some_distance = 10;
         let entry_point = some_vec;
-        let entry_layer = 1;
+        let entry_layer = 0;
 
         let mut stream = search_to_insert_stream::<Q, V, D>(some_query);
 
@@ -274,7 +290,7 @@ mod tests {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, some_query);
                 assert_eq!(
-                    result,
+                    result.0,
                     vec![FurthestQueue::from_ascending_vec(vec![(
                         some_vec,
                         some_distance

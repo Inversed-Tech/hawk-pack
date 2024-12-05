@@ -121,6 +121,10 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .await
         .expect("Failed to set links");
     }
+
+    async fn num_layers(&self) -> usize {
+        todo!();
+    }
 }
 
 fn sql_switch_schema(schema_name: &str) -> Result<String> {
@@ -295,7 +299,7 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let insertion_layer = db.select_layer(rng);
-            let neighbors = db
+            let (neighbors, set_ep) = db
                 .search_to_insert(vector_store, graph.deref_mut(), query, insertion_layer)
                 .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
@@ -305,8 +309,8 @@ mod tests {
                 vector_store,
                 graph.deref_mut(),
                 inserted,
-                insertion_layer,
                 neighbors,
+                set_ep,
             )
             .await;
         }

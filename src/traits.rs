@@ -117,8 +117,7 @@ pub trait VectorStore: Clone + Debug {
 
 #[allow(async_fn_in_trait)]
 pub trait GraphStore<V: VectorStore> {
-    // Vertex type
-    // Neighborhood type
+    // TODO add associated type for neighborhoods rather than hard-coding `FurthestQueue`
 
     /// Return vector reference and layer of HNSW entry point, if initialized
     async fn get_entry_point(&self) -> Option<(V::VectorRef, usize)>;
@@ -132,8 +131,7 @@ pub trait GraphStore<V: VectorStore> {
     // TODO make this a Result to handle if lc is invalid for given base
     // (Does default insert unconditionally?)
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize);
+
+    // Return the number of nonempty graph layers in the store
+    async fn num_layers(&self) -> usize;
 }
-
-// TODO HawkSearcher trait
-
-// TODO Comparisons trait

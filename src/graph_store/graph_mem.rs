@@ -90,7 +90,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
             );
         }
 
-        while layer > self.layers.len() {
+        for _ in self.layers.len()..=layer {
             self.layers.push(Layer::new());
         }
 
@@ -110,9 +110,18 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         }
     }
 
+    /// Set the neighbors of vertex `base` at layer `lc` to `links`.  Requires
+    /// that the graph already has been extended to have layer `lc` using the
+    /// `set_entry_point` function for an entry point at at least this layer.
+    ///
+    /// Panics if `lc` is higher than the maximum initialized layer.
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize) {
-        let layer = &mut self.layers[lc];
+        let layer = self.layers.get_mut(lc).unwrap();
         layer.set_links(base, links);
+    }
+
+    async fn num_layers(&self) -> usize {
+        self.layers.len()
     }
 }
 
@@ -230,7 +239,7 @@ mod tests {
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
             let insertion_layer = searcher.select_layer(&mut rng);
-            let neighbors = searcher
+            let (neighbors, set_ep) = searcher
                 .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
@@ -239,8 +248,8 @@ mod tests {
                     &mut vector_store,
                     &mut graph_store,
                     inserted,
-                    insertion_layer,
                     neighbors,
+                    set_ep,
                 )
                 .await;
         }
@@ -267,7 +276,7 @@ mod tests {
         for raw_query in 0..10 {
             let query = vector_store.prepare_query(raw_query);
             let insertion_layer = searcher.select_layer(&mut rng);
-            let neighbors = searcher
+            let (neighbors, set_ep) = searcher
                 .search_to_insert(&mut vector_store, &mut graph_store, &query, insertion_layer)
                 .await;
             let inserted = vector_store.insert(&query).await;
@@ -276,8 +285,8 @@ mod tests {
                     &mut vector_store,
                     &mut graph_store,
                     inserted,
-                    insertion_layer,
                     neighbors,
+                    set_ep,
                 )
                 .await;
 

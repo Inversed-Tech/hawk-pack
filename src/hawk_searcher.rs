@@ -182,6 +182,12 @@ impl HawkSearcher {
         geom_distr.sample(rng) as usize
     }
 
+    /// Return a tuple containing a distance-sorted list initialized with the
+    /// entry point for the HNSW graph search (with distance to the query
+    /// pre-computed), and the number of search layers of the graph hierarchy,
+    /// that is, the layer of the entry point plus 1.
+    ///
+    /// If no entry point is initialized, returns an empty list and layer 0.
     #[allow(non_snake_case)]
     async fn search_init<V: VectorStore, G: GraphStore<V>>(
         &self,
@@ -195,13 +201,16 @@ impl HawkSearcher {
             let mut W = FurthestQueueV::<V>::new();
             W.insert(vector_store, entry_point, distance).await;
 
-            (W, layer)
+            (W, layer + 1)
         } else {
             (FurthestQueue::new(), 0)
         }
     }
 
-    /// Mutate W into the ef nearest neighbors of q_vec in the given layer.
+    /// Mutate `W` into the `ef` nearest neighbors of query vector `q` in the
+    /// given layer using depth-first graph traversal,  Terminates when `W`
+    /// contains vectors which are the nearest to `q` among all traversed
+    /// vertices and their neighbors.
     #[allow(non_snake_case)]
     async fn search_layer<V: VectorStore, G: GraphStore<V>>(
         &self,
@@ -296,6 +305,21 @@ impl HawkSearcher {
         W
     }
 
+    /// Conduct the search phase of HNSW insertion of `query` into the graph at
+    /// a specified insertion layer.  Layer search uses the "search" type
+    /// `ef_constr` parameter(s) for layers above the insertion layer (1 in
+    /// standard HNSW), and the "insertion" type `ef_constr` parameter(s) for
+    /// layers below the insertion layer (a single fixed `ef_constr` parameter
+    /// in standard HNSW).
+    ///
+    /// The output is a vector of the nearest neighbors found in each insertion
+    /// layer, and a boolean indicating if the insertion sets the entry point.
+    /// Nearest neighbors are provided in the output for each layer in which
+    /// the query is to be inserted, including empty neighbor lists for
+    /// insertion in any layers higher than the current entry point.
+    ///
+    /// If no entry point is initialized for the index, then the insertion will
+    /// set `query` as the index entry point.
     #[allow(non_snake_case)]
     pub async fn search_to_insert<V: VectorStore, G: GraphStore<V>>(
         &self,
@@ -303,13 +327,13 @@ impl HawkSearcher {
         graph_store: &mut G,
         query: &V::QueryRef,
         insertion_layer: usize,
-    ) -> Vec<FurthestQueueV<V>> {
+    ) -> (Vec<FurthestQueueV<V>>, bool) {
         let mut links = vec![];
 
-        let (mut W, layer_count) = self.search_init(vector_store, graph_store, query).await;
+        let (mut W, n_layers) = self.search_init(vector_store, graph_store, query).await;
 
         // Search from the top layer down to layer 0
-        for lc in (0..layer_count).rev() {
+        for lc in (0..n_layers).rev() {
             let ef = if lc > insertion_layer {
                 self.params.get_ef_constr_search(lc)
             } else {
@@ -318,33 +342,48 @@ impl HawkSearcher {
             self.search_layer(vector_store, graph_store, query, &mut W, ef, lc)
                 .await;
 
-            links.push(W.clone());
+            // Save links in output only for layers in which query is inserted
+            if lc <= insertion_layer {
+                links.push(W.clone());
+            }
         }
 
-        links.reverse(); // We inserted top-down, so reverse to match the layer indices (bottom=0)
-        links
+        // We inserted top-down, so reverse to match the layer indices (bottom=0)
+        links.reverse();
+
+        // If query is to be inserted at a new highest layer as a new entry
+        // point, insert additional empty neighborhoods for any new layers
+        let set_ep = insertion_layer + 1 > n_layers;
+        for _ in links.len()..insertion_layer + 1 {
+            links.push(FurthestQueue::new());
+        }
+        assert!(links.len() == insertion_layer + 1);
+
+        (links, set_ep)
     }
 
+    /// Insert a vector using the search results from `search_to_insert`,
+    /// that is the nearest neighbor links at each insertion layer, and a flag
+    /// indicating whether the vector is to be inserted as the new entry point.
     pub async fn insert_from_search_results<V: VectorStore, G: GraphStore<V>>(
         &self,
         vector_store: &mut V,
         graph_store: &mut G,
         inserted_vector: V::VectorRef,
-        insertion_layer: usize,
         links: Vec<FurthestQueueV<V>>,
+        set_ep: bool,
     ) {
-        let layer_count = links.len();
-
-        // Connect the new vector to its neighbors in each layer.
-        for (lc, layer_links) in links.into_iter().enumerate().take(insertion_layer + 1) {
-            self.connect_bidir(vector_store, graph_store, &inserted_vector, layer_links, lc)
+        // If required, set vector as new entry point
+        if set_ep {
+            let insertion_layer = links.len() - 1;
+            graph_store
+                .set_entry_point(inserted_vector.clone(), insertion_layer)
                 .await;
         }
 
-        // If the new vector goes into a layer higher than ever seen before, then it becomes the new entry point of the graph.
-        if insertion_layer >= layer_count {
-            graph_store
-                .set_entry_point(inserted_vector, insertion_layer + 1)
+        // Connect the new vector to its neighbors in each layer.
+        for (lc, layer_links) in links.into_iter().enumerate().rev() {
+            self.connect_bidir(vector_store, graph_store, &inserted_vector, layer_links, lc)
                 .await;
         }
     }
@@ -387,20 +426,14 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let insertion_layer = db.select_layer(rng);
-            let neighbors = db
+            let (neighbors, set_ep) = db
                 .search_to_insert(vector_store, graph_store, query, insertion_layer)
                 .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
             // Insert the new vector into the store.
             let inserted = vector_store.insert(query).await;
-            db.insert_from_search_results(
-                vector_store,
-                graph_store,
-                inserted,
-                insertion_layer,
-                neighbors,
-            )
-            .await;
+            db.insert_from_search_results(vector_store, graph_store, inserted, neighbors, set_ep)
+                .await;
         }
 
         // Search for the same codes and find matches.

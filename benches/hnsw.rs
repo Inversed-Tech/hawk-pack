@@ -28,7 +28,7 @@ fn hnsw_db(c: &mut Criterion) {
         runtime.block_on(async {
             for query in queries.iter() {
                 let insertion_layer = initial_db.select_layer(rng);
-                let neighbors = initial_db
+                let (neighbors, set_ep) = initial_db
                     .search_to_insert(vector_store, graph_store, query, insertion_layer)
                     .await;
                 assert!(!initial_db.is_match(vector_store, &neighbors).await);
@@ -39,8 +39,8 @@ fn hnsw_db(c: &mut Criterion) {
                         vector_store,
                         graph_store,
                         inserted,
-                        insertion_layer,
                         neighbors,
+                        set_ep,
                     )
                     .await;
             }
@@ -53,7 +53,7 @@ fn hnsw_db(c: &mut Criterion) {
                         let raw_query = database_size;
                         let query = vector_store.prepare_query(raw_query);
                         let insertion_layer = initial_db.select_layer(rng);
-                        let neighbors = initial_db
+                        let (neighbors, set_ep) = initial_db
                             .search_to_insert(vector_store, graph_store, &query, insertion_layer)
                             .await;
                         let inserted = vector_store.insert(&query).await;
@@ -62,8 +62,8 @@ fn hnsw_db(c: &mut Criterion) {
                                 vector_store,
                                 graph_store,
                                 inserted,
-                                insertion_layer,
                                 neighbors,
+                                set_ep,
                             )
                             .await;
                     });

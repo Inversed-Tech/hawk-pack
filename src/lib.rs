@@ -10,5 +10,5 @@ pub mod traits;
 pub mod linear_db;
 
 // pub use graph_store::GraphStore;
-pub use traits::{GraphStore, VectorStore};
 pub use hawk_searcher::HawkSearcher;
+pub use traits::{GraphStore, VectorStore};
