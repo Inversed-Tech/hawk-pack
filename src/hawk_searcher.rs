@@ -305,6 +305,32 @@ impl HawkSearcher {
         W
     }
 
+    /// Insert `query` into HNSW index represented by `vector_store` and
+    /// `graph_store`.  Return a `V::VectorRef` representing the inserted
+    /// vector.
+    pub async fn insert<V: VectorStore, G: GraphStore<V>>(
+        &self,
+        vector_store: &mut V,
+        graph_store: &mut G,
+        query: &V::QueryRef,
+        rng: &mut impl RngCore,
+    ) -> V::VectorRef {
+        let insertion_layer = self.select_layer(rng);
+        let (neighbors, set_ep) = self
+            .search_to_insert(vector_store, graph_store, query, insertion_layer)
+            .await;
+        let inserted = vector_store.insert(query).await;
+        self.insert_from_search_results(
+            vector_store,
+            graph_store,
+            inserted.clone(),
+            neighbors,
+            set_ep,
+        )
+        .await;
+        inserted
+    }
+
     /// Conduct the search phase of HNSW insertion of `query` into the graph at
     /// a specified insertion layer.  Layer search uses the "search" type
     /// `ef_constr` parameter(s) for layers above the insertion layer (1 in
@@ -419,12 +445,12 @@ mod tests {
         let rng = &mut AesRng::seed_from_u64(0_u64);
         let db = HawkSearcher::default();
 
-        let queries = (0..100)
+        let queries1 = (0..100)
             .map(|raw_query| vector_store.prepare_query(raw_query))
             .collect::<Vec<_>>();
 
         // Insert the codes.
-        for query in queries.iter() {
+        for query in queries1.iter() {
             let insertion_layer = db.select_layer(rng);
             let (neighbors, set_ep) = db
                 .search_to_insert(vector_store, graph_store, query, insertion_layer)
@@ -436,8 +462,17 @@ mod tests {
                 .await;
         }
 
+        let queries2 = (101..200)
+            .map(|raw_query| vector_store.prepare_query(raw_query))
+            .collect::<Vec<_>>();
+
+        // Insert the codes with helper function
+        for query in queries2.iter() {
+            db.insert(vector_store, graph_store, query, rng).await;
+        }
+
         // Search for the same codes and find matches.
-        for query in queries.iter() {
+        for query in queries1.iter().chain(queries2.iter()) {
             let neighbors = db.search(vector_store, graph_store, query, 1).await;
             assert!(db.is_match(vector_store, &[neighbors]).await);
         }
