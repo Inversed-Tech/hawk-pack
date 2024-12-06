@@ -1,5 +1,5 @@
 use crate::{
-    hnsw_db::{FurthestQueue, FurthestQueueV},
+    data_structures::queue::{FurthestQueue, FurthestQueueV},
     GraphStore, VectorStore,
 };
 use eyre::{eyre, Result};
@@ -50,7 +50,7 @@ impl<V: VectorStore> GraphPg<V> {
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
-    async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
+    async fn get_entry_point(&self) -> Option<(V::VectorRef, usize)> {
         sqlx::query(
             "
                 SELECT entry_point FROM hawk_graph_entry WHERE id = 0
@@ -61,12 +61,11 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .expect("Failed to fetch entry point")
         .map(|row: PgRow| {
             let x: sqlx::types::Json<EntryPoint<V::VectorRef>> = row.get("entry_point");
-            let y: EntryPoint<V::VectorRef> = x.as_ref().clone();
-            y
+            (x.point.clone(), x.layer)
         })
     }
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>) {
+    async fn set_entry_point(&mut self, point: V::VectorRef, layer: usize) {
         sqlx::query(
             "
             INSERT INTO hawk_graph_entry (entry_point, id)
@@ -74,7 +73,7 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
             DO UPDATE SET entry_point = EXCLUDED.entry_point
         ",
         )
-        .bind(sqlx::types::Json(&entry_point))
+        .bind(sqlx::types::Json(&EntryPoint { point, layer }))
         .execute(&self.pool)
         .await
         .expect("Failed to set entry point");
@@ -121,6 +120,10 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .execute(&self.pool)
         .await
         .expect("Failed to set links");
+    }
+
+    async fn num_layers(&self) -> usize {
+        todo!();
     }
 }
 
@@ -212,14 +215,15 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
-#[cfg(feature = "db_dependent")]
 mod tests {
     use std::ops::DerefMut;
 
     use super::test_utils::TestGraphPg;
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
-    use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use crate::{
+        data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher,
+        vector_store::lazy_memory_store::LazyMemoryStore,
+    };
     use aes_prng::AesRng;
     use rand::SeedableRng;
     use tokio;
@@ -249,13 +253,18 @@ mod tests {
         let ep = graph.get_entry_point().await;
 
         let ep2 = EntryPoint {
-            vector_ref: vectors[0],
-            layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
+            point: vectors[0],
+            layer: ep.map(|e| e.1).unwrap_or_default() + 1,
         };
 
-        graph.set_entry_point(ep2.clone()).await;
+        graph.set_entry_point(ep2.point, ep2.layer).await;
 
-        let ep3 = graph.get_entry_point().await.unwrap();
+        let (point3, layer3) = graph.get_entry_point().await.unwrap();
+        let ep3 = EntryPoint {
+            point: point3,
+            layer: layer3,
+        };
+
         assert_eq!(ep2, ep3);
 
         for i in 1..4 {
@@ -290,7 +299,7 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let insertion_layer = db.select_layer(rng);
-            let neighbors = db
+            let (neighbors, set_ep) = db
                 .search_to_insert(vector_store, graph.deref_mut(), query, insertion_layer)
                 .await;
             assert!(!db.is_match(vector_store, &neighbors).await);
@@ -300,8 +309,8 @@ mod tests {
                 vector_store,
                 graph.deref_mut(),
                 inserted,
-                insertion_layer,
                 neighbors,
+                set_ep,
             )
             .await;
         }

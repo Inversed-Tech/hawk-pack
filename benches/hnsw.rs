@@ -3,10 +3,10 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-use hawk_pack::examples::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::graph_store::graph_mem::GraphMem;
-use hawk_pack::hnsw_db::HawkSearcher;
+use hawk_pack::hawk_searcher::HawkSearcher;
 use hawk_pack::linear_db::LinearDb;
+use hawk_pack::vector_store::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::VectorStore;
 use rand::SeedableRng;
 
@@ -28,7 +28,7 @@ fn hnsw_db(c: &mut Criterion) {
         runtime.block_on(async {
             for query in queries.iter() {
                 let insertion_layer = initial_db.select_layer(rng);
-                let neighbors = initial_db
+                let (neighbors, set_ep) = initial_db
                     .search_to_insert(vector_store, graph_store, query, insertion_layer)
                     .await;
                 assert!(!initial_db.is_match(vector_store, &neighbors).await);
@@ -39,8 +39,8 @@ fn hnsw_db(c: &mut Criterion) {
                         vector_store,
                         graph_store,
                         inserted,
-                        insertion_layer,
                         neighbors,
+                        set_ep,
                     )
                     .await;
             }
@@ -53,7 +53,7 @@ fn hnsw_db(c: &mut Criterion) {
                         let raw_query = database_size;
                         let query = vector_store.prepare_query(raw_query);
                         let insertion_layer = initial_db.select_layer(rng);
-                        let neighbors = initial_db
+                        let (neighbors, set_ep) = initial_db
                             .search_to_insert(vector_store, graph_store, &query, insertion_layer)
                             .await;
                         let inserted = vector_store.insert(&query).await;
@@ -62,8 +62,8 @@ fn hnsw_db(c: &mut Criterion) {
                                 vector_store,
                                 graph_store,
                                 inserted,
-                                insertion_layer,
                                 neighbors,
+                                set_ep,
                             )
                             .await;
                     });

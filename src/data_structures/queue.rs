@@ -179,7 +179,7 @@ impl<Vector: Clone, Distance: Clone> Clone for NearestQueue<Vector, Distance> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::examples::lazy_memory_store::LazyMemoryStore;
+    use crate::vector_store::lazy_memory_store::LazyMemoryStore;
 
     #[tokio::test]
     async fn test_furthest_queue() {
