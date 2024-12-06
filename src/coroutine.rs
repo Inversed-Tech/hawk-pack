@@ -72,7 +72,7 @@ pub enum Op<Query, Vector, Distance> {
         links: FurthestQueue<Vector, Distance>,
         lc: usize,
     },
-    GetHeight {
+    NumLayers {
         reply: oneshot::Sender<usize>,
     },
 
@@ -194,7 +194,7 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
     async fn num_layers(&self) -> usize {
         let (reply, get_reply) = oneshot::channel();
 
-        let op = Op::GetHeight { reply };
+        let op = Op::NumLayers { reply };
 
         self.ops.send(op).await.unwrap();
         get_reply.await.unwrap()
