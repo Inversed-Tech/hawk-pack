@@ -11,7 +11,7 @@ use crate::{GraphStore, VectorStore};
 
 // specify construction and search parameters by layer up to this value minus 1
 // any higher layers will use the last set of parameters
-const N_PARAM_LAYERS: usize = 5;
+pub const N_PARAM_LAYERS: usize = 5;
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Clone, Serialize, Deserialize)]
