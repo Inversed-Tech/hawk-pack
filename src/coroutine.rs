@@ -1,7 +1,6 @@
 use crate::{
-    graph_store::EntryPoint,
-    hnsw_db::{FurthestQueue, HawkSearcher},
-    GraphStore, Ref, VectorStore,
+    data_structures::queue::FurthestQueue, hawk_searcher::HawkSearcher, traits::Ref, GraphStore,
+    VectorStore,
 };
 use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
@@ -57,10 +56,11 @@ pub enum Op<Query, Vector, Distance> {
 
     // GraphStore operations.
     GetEntryPoint {
-        reply: oneshot::Sender<Option<EntryPoint<Vector>>>,
+        reply: oneshot::Sender<Option<(Vector, usize)>>,
     },
     SetEntryPoint {
-        entry_point: EntryPoint<Vector>,
+        point: Vector,
+        layer: usize,
     },
     GetLinks {
         base: Vector,
@@ -72,11 +72,16 @@ pub enum Op<Query, Vector, Distance> {
         links: FurthestQueue<Vector, Distance>,
         lc: usize,
     },
+    NumLayers {
+        reply: oneshot::Sender<usize>,
+    },
 
     // Result.
     SearchResult {
         query: Query,
-        result: Vec<FurthestQueue<Vector, Distance>>,
+        // Output: list of nearest neighbors for each insertion layer, and
+        // boolean representing if insertion sets the index entry point
+        result: (Vec<FurthestQueue<Vector, Distance>>, bool),
     },
 }
 
@@ -156,7 +161,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
 }
 
 impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<Q, V, D> {
-    async fn get_entry_point(&self) -> Option<EntryPoint<V>> {
+    async fn get_entry_point(&self) -> Option<(V, usize)> {
         let (reply, get_reply) = oneshot::channel();
 
         let op = Op::GetEntryPoint { reply };
@@ -165,8 +170,8 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
         get_reply.await.unwrap()
     }
 
-    async fn set_entry_point(&mut self, entry_point: EntryPoint<V>) {
-        let op = Op::SetEntryPoint { entry_point };
+    async fn set_entry_point(&mut self, point: V, layer: usize) {
+        let op = Op::SetEntryPoint { point, layer };
         self.ops.send(op).await.unwrap();
     }
 
@@ -186,6 +191,15 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
     async fn set_links(&mut self, base: V, links: FurthestQueue<V, D>, lc: usize) {
         let op = Op::SetLinks { base, links, lc };
         self.ops.send(op).await.unwrap();
+    }
+
+    async fn num_layers(&self) -> usize {
+        let (reply, get_reply) = oneshot::channel();
+
+        let op = Op::NumLayers { reply };
+
+        self.ops.send(op).await.unwrap();
+        get_reply.await.unwrap()
     }
 }
 
@@ -217,7 +231,11 @@ mod tests {
         match op {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, 0);
-                assert!(result.is_empty());
+                assert!(
+                    result.0 == vec![FurthestQueue::new()],
+                    "Search links incorrect"
+                );
+                assert!(result.1, "Vector not added as entry point");
             }
             _ => panic!("Expected SearchResult, got {:?}", op),
         }
@@ -228,17 +246,15 @@ mod tests {
         let some_vec = 0;
         let some_query = 1;
         let some_distance = 10;
-        let ep = EntryPoint {
-            vector_ref: some_vec,
-            layer_count: 1,
-        };
+        let entry_point = some_vec;
+        let entry_layer = 0;
 
         let mut stream = search_to_insert_stream::<Q, V, D>(some_query);
 
         let op = stream.next().await.unwrap();
         match op {
             GetEntryPoint { reply } => {
-                reply.send(Some(ep)).unwrap();
+                reply.send(Some((entry_point, entry_layer))).unwrap();
             }
             _ => panic!("Expected GetEntryPoint, got {:?}", op),
         }
@@ -276,7 +292,7 @@ mod tests {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, some_query);
                 assert_eq!(
-                    result,
+                    result.0,
                     vec![FurthestQueue::from_ascending_vec(vec![(
                         some_vec,
                         some_distance
