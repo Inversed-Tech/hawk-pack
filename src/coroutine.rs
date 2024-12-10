@@ -79,6 +79,8 @@ pub enum Op<Query, Vector, Distance> {
     // Result.
     SearchResult {
         query: Query,
+        // Output: list of nearest neighbors for each insertion layer, and
+        // boolean representing if insertion sets the index entry point
         result: (Vec<FurthestQueue<Vector, Distance>>, bool),
     },
 }

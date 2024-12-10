@@ -383,7 +383,7 @@ impl HawkSearcher {
         for _ in links.len()..insertion_layer + 1 {
             links.push(FurthestQueue::new());
         }
-        assert!(links.len() == insertion_layer + 1);
+        debug_assert!(links.len() == insertion_layer + 1);
 
         (links, set_ep)
     }
