@@ -31,16 +31,16 @@ impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
-        let index_asc = store
-            .search_sorted(
-                &self
-                    .queue
-                    .iter()
-                    .map(|(_, dist)| dist.clone())
-                    .collect::<Vec<Distance>>(),
-                &dist,
-            )
-            .await;
+        let index_asc = search_sorted(
+            store,
+            &self
+                .queue
+                .iter()
+                .map(|(_, dist)| dist.clone())
+                .collect::<Vec<Distance>>(),
+            &dist,
+        )
+        .await;
         self.queue.insert(index_asc, (to, dist));
     }
 
@@ -133,17 +133,17 @@ impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
     where
         V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
     {
-        let index_asc = store
-            .search_sorted(
-                &self
-                    .queue
-                    .iter()
-                    .map(|(_, dist)| dist.clone())
-                    .rev() // switch to ascending order.
-                    .collect::<Vec<Distance>>(),
-                &dist,
-            )
-            .await;
+        let index_asc = search_sorted(
+            store,
+            &self
+                .queue
+                .iter()
+                .map(|(_, dist)| dist.clone())
+                .rev() // switch to ascending order.
+                .collect::<Vec<Distance>>(),
+            &dist,
+        )
+        .await;
         let index_des = self.queue.len() - index_asc; // back to descending order.
         self.queue.insert(index_des, (to, dist));
     }
@@ -156,6 +156,29 @@ impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
     pub fn pop_nearest(&mut self) -> Option<(Vector, Distance)> {
         self.queue.pop()
     }
+}
+
+/// Find the insertion index for a target distance to maintain order in a list of ascending distances.
+async fn search_sorted<V>(
+    store: &mut V,
+    distances: &[V::DistanceRef],
+    target: &V::DistanceRef,
+) -> usize
+where
+    V: VectorStore,
+{
+    let mut left = 0;
+    let mut right = distances.len();
+
+    while left < right {
+        let mid = left + (right - left) / 2;
+
+        match store.less_than(&distances[mid], target).await {
+            true => left = mid + 1,
+            false => right = mid,
+        }
+    }
+    left
 }
 
 // Utility implementations.
