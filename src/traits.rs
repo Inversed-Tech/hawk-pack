@@ -51,26 +51,6 @@ pub trait VectorStore: Clone + Debug {
         distance2: &Self::DistanceRef,
     ) -> bool;
 
-    /// Find the insertion index for a target distance to maintain order in a list of ascending distances.
-    async fn search_sorted(
-        &mut self,
-        distances: &[Self::DistanceRef],
-        target: &Self::DistanceRef,
-    ) -> usize {
-        let mut left = 0;
-        let mut right = distances.len();
-
-        while left < right {
-            let mid = left + (right - left) / 2;
-
-            match self.less_than(&distances[mid], target).await {
-                true => left = mid + 1,
-                false => right = mid,
-            }
-        }
-        left
-    }
-
     // Batch variants.
 
     /// Persist a batch of queries as new vectors in the store, and return references to them.
